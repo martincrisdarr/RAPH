@@ -1,0 +1,340 @@
+---
+alwaysApply: true
+---
+
+# .cursor/rules/pattern.mdc
+# Reglas de trabajo (Flutter Frontend) — MVC estricto
+
+## 0) Idioma
+- **TODAS** las interacciones conmigo (preguntas, planes, decisiones, explicaciones) deben estar **en ESPAÑOL**.
+
+---
+
+## 1) Preferencias de ejecución de comandos
+### 1.1 Comandos locales (SafeToAutoRun: true)
+Tenés permiso para ejecutar automáticamente comandos locales **seguros**, por ejemplo:
+- crear carpetas/archivos
+- leer/escribir archivos
+- listar directorios
+- formatear código / analizar lint
+- ejecutar tests locales
+- `flutter pub get`, `dart format`, `dart analyze`, `flutter test`
+
+### 1.2 Comandos remotos / Git / servicios externos (SafeToAutoRun: false)
+**NUNCA** ejecutar automáticamente comandos que interactúen con remoto o servicios externos, por ejemplo:
+- `git push`, `git pull`, `git fetch`
+- autenticaciones (`gh auth`, `git credential`, etc.)
+- acciones CI/CD, deployments, etc.
+
+Estos **SIEMPRE** requieren mi confirmación explícita antes de correrlos.
+
+---
+
+## 2) Prioridad absoluta a la claridad
+- Código **explícito** antes que “inteligente”.
+- Nombres **largos y descriptivos** para clases/métodos/variables.
+- Evitar abreviaturas salvo estándares técnicos.
+- Priorizar **legibilidad** por sobre optimización prematura.
+- Un archivo/clase = una responsabilidad clara.
+
+---
+
+## 3) Modelo de dominio antes que código
+Antes de escribir código:
+- Definir **modelo de datos**: entidades, estados, relaciones y contratos JSON.
+- Separar claramente:
+  - **Dominio / Datos (Models)**
+  - **Lógica de aplicación (Services / Components)**
+  - **Orquestación y estado (Controllers)**
+  - **Presentación (Views)**
+- Prohibido mezclar responsabilidades.
+
+---
+
+## 4) Programación orientada a objetos real
+- Usar clases con responsabilidad clara.
+- Evitar clases “Dios”.
+- Métodos chicos, una sola responsabilidad.
+- **Estados explícitos** (enums) — no strings mágicos.
+- Usar **constantes** para claves de JSON y parámetros requeridos.
+
+---
+
+## 5) Datos antes que UI
+- Definir primero:
+  - Models / DTOs / contratos
+  - Endpoints
+  - Servicios / repositorios / mappers
+- No diseñar UI sin entender los datos que maneja.
+
+---
+
+## 6) Manejo de errores explícito
+- No ocultar errores.
+- Mensajes claros y accionables.
+- Diferenciar:
+  - error técnico (red, timeout, parsing)
+  - error de negocio (validación del backend, reglas del dominio)
+- Estandarizar errores con un tipo común (ej: `AppError`, `ApiError`).
+
+---
+
+## 7) Contexto real de producción (Frontend Flutter)
+Asumir entornos reales:
+- Android / iOS / Web (según aplique)
+- Conectividad intermitente
+- Latencia, timeouts, reintentos
+- Manejo de estados de carga (loading/empty/error/success)
+- Cancelación de requests si corresponde
+
+---
+
+## 8) Si algo no está claro, preguntame
+- Si no entendés un flujo, contrato o comportamiento: **PREGUNTAR**.
+- Prefiero responder preguntas antes que que inventes.
+- **Front no modifica el backend**: no inventar endpoints, campos o contratos.
+- Si falta un endpoint o campo: se solicita/propone, no se asume.
+
+---
+
+## 9) MVC estricto (OBLIGATORIO)
+> Si no se va a usar, tengo que autorizarlo yo.
+
+### 9.1 Model (Datos / Contratos)
+- Representa datos de dominio y contratos (JSON).
+- **Sin lógica de UI**.
+- Validaciones de dominio *si aplica* (simples, consistentes).
+- Constantes para keys de JSON y códigos.
+
+### 9.2 View (UI)
+- **SOLO** render/UI (pages, widgets).
+- Cero lógica de negocio.
+- Cero llamadas directas a red/servicios.
+- Puede leer estado del Controller (ej: via Provider/Riverpod/GetX/etc., según el proyecto).
+
+### 9.3 Controller (Orquestación + Estado)
+- Orquesta casos de uso para una vista/pantalla.
+- Maneja estado, carga, errores, paginación, etc.
+- Llama a Services/Repositories, NO arma endpoints “a mano”.
+- Si aparece lógica repetida → mover a Service/Component.
+
+---
+
+## 10) Estructura de carpetas obligatoria por módulo
+Cada módulo debe organizarse como mínimo:
+
+/<module_name>/
+  /models/
+  /controllers/
+  /views/
+  /components/
+
+Si crece, agregar subcarpetas por responsabilidad:
+- /models/dto/
+- /models/enums/
+- /models/mappers/
+- /components/services/
+- /components/helpers/
+- /components/validators/
+- /components/repositories/
+- /components/endpoints/  (si aplica)
+
+**Regla:** no inventar carpetas sin justificar y sin mantener coherencia.
+
+---
+
+## 11) Qué va en components (regla de oro)
+Todo lo que NO sea estrictamente Model/Controller/View va en `components`, por ejemplo:
+- Services (casos de uso)
+- Helpers (fechas, formato, conversión)
+- Validators (reutilizables/complex)
+- Repositories / Gateways (API/HTTP)
+- Integrations (FCM, storage, geoloc, etc.)
+- Policies / Permissions (si existen)
+- Mappers (Model <-> DTO)
+
+---
+
+## 12) Nomenclatura y responsabilidades
+- Controllers terminan en `Controller` y son finos.
+- Services terminan en `Service` (ej: `LoginService`, `UserProfileService`).
+- Repositories terminan en `Repository` (ej: `UserRepository`).
+- DTOs terminan en `Dto` / `RequestDto` / `ResponseDto` y **no contienen lógica**.
+- Enums con nombres claros (no strings mágicos).
+
+---
+
+## 13) Cuando propongas código, mostrás SIEMPRE
+- Ruta exacta del archivo (dónde va)
+- Nombre de la clase por archivo
+- Dependencias usadas (y por qué)
+- Ejemplo mínimo de uso:
+  - View → Controller
+  - Controller → Service/Repository
+  - Service/Repository → Endpoints/ApiClient
+- Si tocás un módulo, respetar su estructura existente.
+
+---
+
+## 14) Prohibido inventar estructuras
+- No inventar carpetas nuevas sin justificar.
+- No inventar “arquitecturas paralelas”.
+- Respetar el orden y estilo del proyecto.
+
+---
+
+## 15) Models (OBLIGATORIO)
+- Los Models se crean **según el backend/endpoint/contrato** que yo indique.
+- Siempre definir **constantes** para:
+  - keys de JSON (ej: `JsonKeys.userId`)
+  - clasificaciones/códigos/estados
+- Parsing explícito (sin magia).
+- Preferir `fromJson/toJson` claros y testeables.
+
+---
+
+## 16) Controllers como Singleton (si el proyecto lo requiere)
+Implementar Controllers como **Singleton** para reutilizar recursos pesados (clients HTTP, caches, etc.).
+En Dart/Flutter, preferir patrón seguro y simple:
+
+- constructor privado
+- instancia estática privada
+- getter `instance`
+
+Ejemplo conceptual (no copiar literal si el proyecto usa otro estándar):
+- `static final FooController _instance = FooController._();`
+- `static FooController get instance => _instance;`
+- `FooController._();`
+
+**No** crear múltiples instancias sin necesidad.
+
+---
+
+# GESTIÓN DE URLS Y ENDPOINTS (OBLIGATORIO)
+
+## 17) Base URL centralizada
+- La base URL del backend existe en **una sola** clase de configuración.
+  - Ej: `ApiConfig.baseUrl`
+- Prohibido repetir la base URL en cualquier otra parte.
+
+## 18) Endpoints definidos por recurso
+- Cada recurso del backend debe tener una clase dedicada:
+  - `AuthEndpoints`
+  - `UserEndpoints`
+  - `IncidentEndpoints`
+- Estas clases son la **única fuente de verdad** de los paths.
+
+## 19) Prohibido strings de paths en Controllers / ApiClients / Repos
+- Controllers / ApiClients / Repositories:
+  - NO definen strings de paths
+  - NO arman paths a mano
+- Solo referencian constantes/métodos de `Endpoints`.
+
+## 20) Construcción de URL
+- URL final = `BASE_URL + EndpointDefinido`
+- Concatenación:
+  - solo en función centralizada (ej: `ApiUrlBuilder.build(...)`)
+  - o en el punto de llamada usando constantes ya definidas
+- Prohibido concatenar strings arbitrarios.
+
+## 21) Endpoints dinámicos
+- Endpoints con parámetros deben ser **métodos**:
+  - ej: `IncidentEndpoints.cancel(id)`
+- Prohibido armar paths dinámicos en el controller.
+
+## 22) Contrato backend → frontend
+- El backend define el contrato.
+- El frontend lo replica **exacto**.
+- No se permiten aliases ni reinterpretaciones.
+
+## 23) Organización de archivos de endpoints
+- Endpoints globales:
+  - `/components/endpoints/`
+- Endpoints específicos de módulo:
+  - `/<module>/components/endpoints/`
+
+## 24) Cuando generes código relacionado a requests
+Mostrás siempre:
+- Clase de endpoints utilizada
+- Constante/método exacto
+- URL final resultante (explicativo)
+
+
+---
+
+# 30) ESTRUCTURA MODULAR OBLIGATORIA (Feature Modules)
+## 30.1 Regla principal
+Está **PROHIBIDO** usar una estructura global plana como:
+- `lib/controllers`
+- `lib/models`
+- `lib/views`
+- `lib/components`
+
+En su lugar, el proyecto debe estar **modularizado por feature/módulo**.
+
+## 30.2 Estructura requerida
+Todo módulo debe vivir dentro de:
+
+/lib/modules/<module_name>/
+  /controllers/
+  /models/
+  /views/
+  /components/
+
+Ejemplos:
+- `/lib/modules/user/...`
+- `/lib/modules/calls/...`
+- `/lib/modules/auth/...`
+
+## 30.3 Código compartido
+Todo lo que sea reutilizable por varios módulos NO va dentro de un módulo. Debe ir a:
+
+/lib/shared/
+  /components/
+  /helpers/
+  /services/
+  /validators/
+  /endpoints/
+  /models/        (si son modelos compartidos)
+  /theme/
+  /routing/       (si aplica)
+  /config/
+
+Regla: si un componente/model/helper se usa en 2+ módulos, se mueve a `shared`.
+
+## 30.4 Endpoints
+- Endpoints por recurso pueden estar en:
+  - `/lib/shared/endpoints/` (global)
+  - o `/lib/modules/<module>/components/endpoints/` (si es estrictamente del módulo)
+- Prohibido duplicar endpoints entre módulos.
+
+## 30.5 Importaciones y orden
+- Prohibido importar “hacia adentro” de otro módulo salvo que sea un contrato compartido.
+- Si un módulo necesita algo de otro, se extrae a `shared`.
+
+## 30.6 Al generar o modificar código
+SIEMPRE:
+- Crear/ubicar archivos dentro de su módulo correspondiente.
+- Mantener `MVC estricto` dentro del módulo.
+- Actualizar imports/exports sin romper compilación.
+- No mover cosas a `shared` sin justificar (solo si realmente es compartido).
+---
+
+
+---
+
+# GIT (PROCESO) — SOLO CON MI CONFIRMACIÓN
+Si hay que trabajar con Git:
+1) Pull en rama development
+2) Crear rama nueva
+3) Realizar cambios
+4) Subir rama y crear PR y pasármelo para merge
+
+**IMPORTANTE:** No ejecutar comandos remotos sin mi confirmación.
+
+---
+
+# Respeto por el proyecto
+1) Primero analizar la estructura existente y respetarla.
+2) Solo refactorizar si yo lo solicito. No sugerir refactors “porque sí”.
+3) Máximo esfuerzo por mantener el orden del proyecto.
