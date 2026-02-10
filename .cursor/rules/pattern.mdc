@@ -321,6 +321,45 @@ SIEMPRE:
 ---
 
 
+## UI / Design System (OBLIGATORIO)
+
+### Estilo objetivo
+- UI dark institucional moderna (estilo “Giro / antigravity”)
+- Fondo oscuro con gradientes suaves.
+- Cards tipo glass (opacidad + borde sutil + blur opcional).
+- Acentos tipo neon por categoría (rojo/azul/verde/violeta) solo para estados/highlights.
+
+### Design Tokens (NO hardcodear colores)
+- Prohibido hardcodear colores en widgets (excepto prototipos puntuales).
+- Todos los colores deben venir de:
+  - ThemeData / ColorScheme
+  - o `shared/theme/app_theme_tokens.dart`
+
+### Componentes base obligatorios
+Antes de crear pantallas nuevas, usar/crear en `shared/components/ui/`:
+- `AppGlassCard` (card glass)
+- `AppSectionTitle`
+- `AppStatusChip`
+- `AppIconBadge`
+- `AppSpacing` (consts de paddings)
+
+### Animaciones permitidas (mínimas)
+- Permitidas SOLO animaciones sutiles:
+  - `AnimatedContainer`, `AnimatedOpacity`, `TweenAnimationBuilder`
+- Prohibido:
+  - animaciones ruidosas, parallax, loops constantes
+- Usar duraciones 150–250ms y curvas suaves (easeOut).
+
+### Accesibilidad / contraste
+- Texto siempre con contraste suficiente en dark.
+- Estados con color + texto (no solo color).
+
+### Sidebar/Topbar
+- Deben consumir tokens del Theme (no colores sueltos).
+- Estados activos con glow sutil o borde, sin animaciones exageradas.
+
+
+
 ---
 
 # GIT (PROCESO) — SOLO CON MI CONFIRMACIÓN
