@@ -9,7 +9,7 @@ class ListadosService {
       '$_baseUrl/ser_sien_dsp_incidente?expand=localidad,victimas,demanda_recibidas';
 
   static const String _demandaRecibidaEndpoint =
-      '$_baseUrl/ser_sien_dsp_demanda_recibida?expand=estado,tipo_ingreso';
+      '$_baseUrl/ser_sien_dsp_demanda_recibida?expand=estado,tipo_ingreso,incidente';
 
   static Future<List<Map<String, dynamic>>> obtenerIncidentes() async {
     final response = await http.get(Uri.parse(_incidenteEndpoint));

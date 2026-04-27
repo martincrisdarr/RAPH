@@ -35,7 +35,7 @@ class _ListadosPageState extends State<ListadosPage> {
     'acciones',
   ];
 
-  static const _llamadosColumnFlex = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+  static const _llamadosColumnFlex = [3, 3, 3, 3, 3, 3, 3, 3, 2];
 
   static const _incidentesColumns = [
     'Fecha y Hora',
@@ -57,7 +57,7 @@ class _ListadosPageState extends State<ListadosPage> {
     'acciones',
   ];
 
-  static const _incidentesColumnFlex = [2, 2, 2, 2, 2, 2, 2];
+  static const _incidentesColumnFlex = [2, 2, 2, 2, 2, 2, 1];
 
   static const _rowHeight = 40.0;
   _ListadoTab _activeTab = _ListadoTab.llamados;
@@ -102,10 +102,9 @@ class _ListadosPageState extends State<ListadosPage> {
 
     try {
       final demandas = await ListadosService.obtenerDemandasRecibidas();
-      final incidentesPorId = await _obtenerIncidentesPorId(demandas);
       setState(() {
         _llamados = demandas
-            .map((demanda) => _mapDemandaToLlamado(demanda, incidentesPorId))
+            .map(_mapDemandaToLlamado)
             .toList();
       });
     } catch (e) {
@@ -245,7 +244,6 @@ class _ListadosPageState extends State<ListadosPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white10),
               ),
               child: Column(
@@ -285,47 +283,11 @@ class _ListadosPageState extends State<ListadosPage> {
     );
   }
 
-  Future<Map<int, Map<String, dynamic>>> _obtenerIncidentesPorId(
-    List<Map<String, dynamic>> demandas,
-  ) async {
-    final ids = <int>{};
-    for (final demanda in demandas) {
-      final rawId = demanda['idincidente'];
-      if (rawId is int) ids.add(rawId);
-      if (rawId is String) {
-        final parsed = int.tryParse(rawId);
-        if (parsed != null) ids.add(parsed);
-      }
-    }
 
-    final pairs = await Future.wait(
-      ids.map((id) async {
-        try {
-          final incidente = await ListadosService.obtenerIncidentePorId(id);
-          if (incidente == null) return null;
-          return MapEntry(id, incidente);
-        } catch (_) {
-          return null;
-        }
-      }),
-    );
-
-    final result = <int, Map<String, dynamic>>{};
-    for (final pair in pairs) {
-      if (pair != null) result[pair.key] = pair.value;
-    }
-    return result;
-  }
-
-  Map<String, String> _mapDemandaToLlamado(
-    Map<String, dynamic> demanda,
-    Map<int, Map<String, dynamic>> incidentesPorId,
-  ) {
-    final idIncidenteRaw = demanda['idincidente'];
-    int? idIncidente;
-    if (idIncidenteRaw is int) idIncidente = idIncidenteRaw;
-    if (idIncidenteRaw is String) idIncidente = int.tryParse(idIncidenteRaw);
-    final incidente = idIncidente != null ? incidentesPorId[idIncidente] : null;
+  Map<String, String> _mapDemandaToLlamado(Map<String, dynamic> demanda) {
+    final incidente = demanda['incidente'] is Map<String, dynamic>
+        ? demanda['incidente'] as Map<String, dynamic>
+        : null;
 
     final tipoIngreso = _readValue(demanda, const ['tipo_ingreso.descripcion', 'tipo_ingreso.nombre']);
     final fechaHora = _readValue(demanda, const ['fechahora', 'fecha_hora', 'fechaHora', 'fecha']);
@@ -403,10 +365,6 @@ class _ListadosPageState extends State<ListadosPage> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white10,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
       ),
       height: _rowHeight,
       child: Row(
@@ -415,7 +373,7 @@ class _ListadosPageState extends State<ListadosPage> {
             Expanded(
               flex: _activeColumnFlex[i],
               child: Container(
-                alignment: Alignment.centerLeft,
+                alignment: _activeColumnKeys[i] == 'acciones' ? Alignment.center : Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   border: Border(
@@ -426,7 +384,7 @@ class _ListadosPageState extends State<ListadosPage> {
                 ),
                 child: Text(
                   _activeColumns[i],
-                  style: theme.textTheme.labelSmall?.copyWith(
+                  style: theme.textTheme.labelMedium?.copyWith(
                     color: Colors.white70,
                     fontWeight: FontWeight.w600,
                   ),
@@ -453,7 +411,7 @@ class _ListadosPageState extends State<ListadosPage> {
                 ? Expanded(
                     flex: _activeColumnFlex[i],
                     child: Container(
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.center,
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       decoration: BoxDecoration(
                         border: Border(
@@ -467,13 +425,13 @@ class _ListadosPageState extends State<ListadosPage> {
                       child: llamado == null
                           ? const SizedBox.shrink()
                           : const Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.visibility_outlined, size: 15, color: Colors.white54),
-                                SizedBox(width: 8),
-                                Icon(Icons.edit_outlined, size: 15, color: Colors.white54),
-                                SizedBox(width: 8),
-                                Icon(Icons.delete_outline, size: 15, color: Colors.redAccent),
+                                Icon(Icons.visibility_outlined, size: 20, color: Colors.white54),
+                                SizedBox(width: 12),
+                                Icon(Icons.edit_outlined, size: 20, color: Colors.white54),
+                                SizedBox(width: 12),
+                                Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
                               ],
                             ),
                     ),
