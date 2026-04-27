@@ -53,7 +53,7 @@ class _IngresoPageState extends State<IngresoPage> {
                   child: Column(
                     children: [
                       SizedBox(
-                        height: 380,
+                        height: 470,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -65,26 +65,26 @@ class _IngresoPageState extends State<IngresoPage> {
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
-                        height: 1000,
+                        height: 400,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
+                            const Expanded(
                               flex: 3,
-                              child: Column(
-                                children: [
-                                  const Expanded(flex: 1, child: IngresoSectionCard(title: 'INCIDENTE', child: IncidenteSection())),
-                                  const SizedBox(height: 16),
-                                  const Expanded(flex: 3, child: IngresoSectionCard(title: 'VÍCTIMAS', child: VictimasSection())),
-                                ],
-                              ),
+                              child: IngresoSectionCard(title: 'INCIDENTE', child: IncidenteSection()),
                             ),
                             const SizedBox(width: 16),
                             const Expanded(
                               flex: 1,
-                              child: IngresoSectionCard(title: 'NOVEDADES', child: NovedadesSection())),
+                              child: IngresoSectionCard(title: 'NOVEDADES', child: NovedadesSection()),
+                            ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      const SizedBox(
+                        height: 600,
+                        child: IngresoSectionCard(title: 'VÍCTIMAS', child: VictimasSection()),
                       ),
                     ],
                   ),
