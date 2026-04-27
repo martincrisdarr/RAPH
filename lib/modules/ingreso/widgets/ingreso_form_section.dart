@@ -31,6 +31,37 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // --- Datos de Llamada (Siempre visibles) ---
+        Row(
+          children: [
+            Expanded(
+              child: CustomSelect<Configuracion>(
+                label: 'Ingreso',
+                fetchItems: () => ConfiguracionService.obtenerTiposIngreso(),
+                itemLabel: (item) => item.descripcion,
+                onSelected: (val) {
+                  if (val != null) {
+                    debugPrint('Seleccionado: ${val.idconfiguracion}');
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                decoration: const InputDecoration(labelText: 'Teléfono'),
+                keyboardType: TextInputType.phone,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          decoration: const InputDecoration(labelText: 'Nombre'),
+          keyboardType: TextInputType.name,
+        ),
+        const SizedBox(height: 24),
+
         // --- Botones toggle ---
         Row(
           children: [
@@ -55,41 +86,6 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
             ),
           ],
         ),
-
-        // --- Formulario NUEVO ---
-        if (_isNuevo) ...[
-          const SizedBox(height: 24),
-          // Fila 1: Ingreso (1/2) + Teléfono (1/2)
-          Row(
-            children: [
-              Expanded(
-                child: CustomSelect<Configuracion>(
-                  label: 'Ingreso',
-                  fetchItems: () => ConfiguracionService.obtenerTiposIngreso(),
-                  itemLabel: (item) => item.descripcion,
-                  onSelected: (val) {
-                    if (val != null) {
-                      debugPrint('Seleccionado: ${val.idconfiguracion}');
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: TextFormField(
-                  decoration: const InputDecoration(labelText: 'Teléfono'),
-                  keyboardType: TextInputType.phone,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Fila 2: Nombre (2/2 — ancho completo)
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'Nombre'),
-            keyboardType: TextInputType.name,
-          ),
-        ],
 
         // --- Tabla INCIDENTE EN CURSO ---
         if (!_isNuevo) ...[

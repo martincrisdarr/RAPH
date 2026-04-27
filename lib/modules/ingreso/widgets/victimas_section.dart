@@ -155,22 +155,24 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
         children: [
           _buildTriageBanner(theme, victima),
           const SizedBox(height: 16),
+          // Datos básicos (en una línea)
+          _buildDatosRow(theme, victima),
+          const SizedBox(height: 24),
+          // Buscador / Etiquetas y Preguntas / Recomendaciones
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Datos básicos
                 Expanded(
                   flex: 1,
                   child: SingleChildScrollView(
-                    child: _buildDatosColumn(theme, victima),
+                    child: _buildBuscadorEtiquetasColumn(theme, victima),
                   ),
                 ),
                 const SizedBox(width: 24),
-                // Buscador y síntomas
                 Expanded(
                   flex: 1,
-                  child: _buildSintomasColumn(theme, victima),
+                  child: _buildPreguntasRecomendacionesBox(theme, victima),
                 ),
               ],
             ),
@@ -258,73 +260,68 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
 
   Widget _buildTriageOptionButton(VictimaData victima, String code, Color color) {
     final isSelected = victima.codigoTriage == code;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          victima.codigoTriage = code;
-        });
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected ? color : color.withOpacity(0.2),
-          border: Border.all(color: color, width: 2),
-        ),
-        child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isSelected ? color : color.withOpacity(0.2),
+        border: Border.all(color: color, width: 2),
       ),
+      child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
     );
   }
 
 
 
-  Widget _buildDatosColumn(ThemeData theme, VictimaData victima) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildDatosRow(ThemeData theme, VictimaData victima) {
+    return Row(
       children: [
-        TextFormField(
-          decoration: _compactDecoration('Nombre y apellido'),
-          onChanged: (val) => victima.nombre = val,
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            decoration: _compactDecoration('Nombre y apellido'),
+            onChanged: (val) => victima.nombre = val,
+          ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                decoration: _compactDecoration('Edad'),
-                keyboardType: TextInputType.number,
-                onChanged: (val) => victima.edad = val,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: CustomSelect<String>(
-                label: 'Género',
-                items: const ['Masculino', 'Femenino', 'Otro', 'No especifica'],
-                itemLabel: (item) => item,
-                initialSelection: victima.genero.isNotEmpty ? victima.genero : null,
-                onSelected: (val) {
-                  if (val != null) {
-                    victima.genero = val;
-                  }
-                },
-              ),
-            ),
-          ],
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 1,
+          child: TextFormField(
+            decoration: _compactDecoration('Edad'),
+            keyboardType: TextInputType.number,
+            onChanged: (val) => victima.edad = val,
+          ),
         ),
-        const SizedBox(height: 16),
-        TextFormField(
-          decoration: _compactDecoration('DNI'),
-          keyboardType: TextInputType.number,
-          onChanged: (val) => victima.dni = val,
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 1,
+          child: CustomSelect<String>(
+            label: 'Género',
+            items: const ['Masculino', 'Femenino', 'Otro', 'No especifica'],
+            itemLabel: (item) => item,
+            initialSelection: victima.genero.isNotEmpty ? victima.genero : null,
+            onSelected: (val) {
+              if (val != null) {
+                victima.genero = val;
+              }
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 1,
+          child: TextFormField(
+            decoration: _compactDecoration('DNI'),
+            keyboardType: TextInputType.number,
+            onChanged: (val) => victima.dni = val,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildSintomasColumn(ThemeData theme, VictimaData victima) {
+  Widget _buildBuscadorEtiquetasColumn(ThemeData theme, VictimaData victima) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -371,30 +368,30 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
             );
           }).toList(),
         ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white10),
-            ),
-            // Mock content para las preguntas/recomendaciones basadas en síntomas
-            child: victima.sintomasSeleccionados.isNotEmpty || victima.busqueda.isNotEmpty
-                ? _buildPreguntasSintomas(theme, victima)
-                : const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text(
-                        'Seleccione un síntoma o busque\npara ver el proceso de asistencia',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white38, fontSize: 13),
-                      ),
-                    ),
-                  ),
-          ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildPreguntasRecomendacionesBox(ThemeData theme, VictimaData victima) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      // Mock content para las preguntas/recomendaciones basadas en síntomas
+      child: victima.sintomasSeleccionados.isNotEmpty || victima.busqueda.isNotEmpty
+          ? _buildPreguntasSintomas(theme, victima)
+          : const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Seleccione un síntoma o busque\npara ver el proceso de asistencia',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                ),
+              ),
+            ),
     );
   }
 
