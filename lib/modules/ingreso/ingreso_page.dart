@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/auth_controller.dart';
 import '../../shared/components/custom_stepper.dart';
 import 'widgets/ingreso_section_card.dart';
 import 'widgets/ingreso_form_section.dart';
@@ -74,9 +75,19 @@ class _IngresoPageState extends State<IngresoPage> {
                               child: IngresoSectionCard(title: 'INCIDENTE', child: IncidenteSection()),
                             ),
                             const SizedBox(width: 16),
-                            const Expanded(
+                            Expanded(
                               flex: 1,
-                              child: IngresoSectionCard(title: 'NOVEDADES', child: NovedadesSection()),
+                              child: IngresoSectionCard(
+                                title: 'NOVEDADES',
+                                child: NovedadesSection(
+                                  usuarioActual: () {
+                                    final u = RaphAuthController.instance.currentUser;
+                                    if (u == null) return 'Sistema';
+                                    final nombre = '${u.nombre ?? ''} ${u.apellido ?? ''}'.trim();
+                                    return nombre.isNotEmpty ? nombre : (u.email ?? 'Sistema');
+                                  }(),
+                                ),
+                              ),
                             ),
                           ],
                         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
+import '../controllers/ingreso_controller.dart';
 
 class IngresoFormSection extends StatefulWidget {
   const IngresoFormSection({super.key});
@@ -12,6 +13,38 @@ class IngresoFormSection extends StatefulWidget {
 
 class _IngresoFormSectionState extends State<IngresoFormSection> {
   bool _isNuevo = true;
+  
+  final _ingresoController = IngresoController();
+  late final TextEditingController _telefonoController;
+  late final TextEditingController _nombreController;
+
+  @override
+  void initState() {
+    super.initState();
+    _telefonoController = TextEditingController(text: _ingresoController.demandaActual.nroLlamadaEntrante?.toString() ?? '');
+    _nombreController = TextEditingController(text: _ingresoController.demandaActual.apellidoNombre ?? '');
+    _ingresoController.addListener(_onControllerUpdate);
+  }
+
+  void _onControllerUpdate() {
+    if (mounted) {
+      if (_telefonoController.text.isEmpty && _ingresoController.demandaActual.nroLlamadaEntrante != null) {
+        _telefonoController.text = _ingresoController.demandaActual.nroLlamadaEntrante.toString();
+      }
+      if (_nombreController.text.isEmpty && _ingresoController.demandaActual.apellidoNombre != null && _ingresoController.demandaActual.apellidoNombre!.isNotEmpty) {
+        _nombreController.text = _ingresoController.demandaActual.apellidoNombre!;
+      }
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _ingresoController.removeListener(_onControllerUpdate);
+    _telefonoController.dispose();
+    _nombreController.dispose();
+    super.dispose();
+  }
 
   static const _tableColumns = ['ID', 'Fecha', 'Tipo', 'Dirección', 'Estado'];
   static const _tableColumnFlex = [1, 2, 2, 4, 2];
@@ -39,9 +72,11 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
                 label: 'Ingreso',
                 fetchItems: () => ConfiguracionService.obtenerTiposIngreso(),
                 itemLabel: (item) => item.descripcion,
+                initialSelectionId: _ingresoController.demandaActual.idCfgTipoIngreso,
+                matchById: (item) => item.idconfiguracion,
                 onSelected: (val) {
                   if (val != null) {
-                    debugPrint('Seleccionado: ${val.idconfiguracion}');
+                    _ingresoController.updateDemanda(idCfgTipoIngreso: val.idconfiguracion);
                   }
                 },
               ),
@@ -49,17 +84,22 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
             const SizedBox(width: 16),
             Expanded(
               child: TextFormField(
+                controller: _telefonoController,
                 decoration: const InputDecoration(labelText: 'Teléfono'),
                 keyboardType: TextInputType.phone,
+                onChanged: (val) => _ingresoController.updateDemanda(nroLlamadaEntrante: int.tryParse(val)),
               ),
             ),
           ],
         ),
         const SizedBox(height: 16),
         TextFormField(
+          controller: _nombreController,
           decoration: const InputDecoration(labelText: 'Nombre'),
           keyboardType: TextInputType.name,
+          onChanged: (val) => _ingresoController.updateDemanda(apellidoNombre: val),
         ),
+        const SizedBox(height: 16),
         const SizedBox(height: 24),
 
         // --- Botones toggle ---

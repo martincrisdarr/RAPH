@@ -8,6 +8,11 @@ class CustomSelect<T> extends StatefulWidget {
   final String Function(T) itemLabel;
   final ValueChanged<T?>? onSelected;
   final T? initialSelection;
+  /// ID para restaurar la selección tras una carga asíncrona.
+  /// Se compara con [matchById] para encontrar el item correcto.
+  final dynamic initialSelectionId;
+  /// Función que extrae el ID comparable del item. Requerida si [initialSelectionId] es usado.
+  final dynamic Function(T)? matchById;
 
   const CustomSelect({
     super.key,
@@ -17,6 +22,8 @@ class CustomSelect<T> extends StatefulWidget {
     this.fetchItems,
     this.onSelected,
     this.initialSelection,
+    this.initialSelectionId,
+    this.matchById,
   }) : assert(items != null || fetchItems != null,
             'Debes proveer la lista de items estáticos o la función fetchItems.');
 
@@ -27,6 +34,7 @@ class CustomSelect<T> extends StatefulWidget {
 class _CustomSelectState<T> extends State<CustomSelect<T>> {
   List<T> _items = [];
   bool _isLoading = false;
+  T? _resolvedInitialSelection;
 
   @override
   void initState() {
@@ -37,6 +45,7 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
   void _initData() {
     if (widget.items != null) {
       _items = widget.items!;
+      _resolveInitialSelection();
     } else if (widget.fetchItems != null) {
       _loadItems();
     }
@@ -50,9 +59,9 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
         setState(() {
           _items = data;
         });
+        _resolveInitialSelection();
       }
     } catch (e) {
-      // Manejar error en la implementación real si es necesario
       debugPrint('Error loading select options: $e');
     } finally {
       if (mounted) {
@@ -61,11 +70,28 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
     }
   }
 
+  /// Busca en la lista el item cuyo ID coincide con [initialSelectionId].
+  void _resolveInitialSelection() {
+    if (widget.initialSelection != null) {
+      _resolvedInitialSelection = widget.initialSelection;
+      return;
+    }
+    if (widget.initialSelectionId != null && widget.matchById != null) {
+      try {
+        _resolvedInitialSelection = _items.firstWhere(
+          (item) => widget.matchById!(item) == widget.initialSelectionId,
+        );
+      } catch (_) {
+        _resolvedInitialSelection = null;
+      }
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Estado de carga: usamos SkeletonField para consistencia visual
     if (_isLoading) {
       return SkeletonField(labelWidth: widget.label.length * 7.5);
     }
@@ -73,8 +99,10 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
     return DropdownMenu<T>(
       label: Text(widget.label),
       expandedInsets: EdgeInsets.zero,
-      initialSelection: widget.initialSelection,
-      inputDecorationTheme: theme.inputDecorationTheme,
+      initialSelection: _resolvedInitialSelection,
+      inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+      ),
       menuStyle: MenuStyle(
         backgroundColor: MaterialStatePropertyAll(theme.scaffoldBackgroundColor),
         elevation: const MaterialStatePropertyAll(8),
