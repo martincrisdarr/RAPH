@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../shared/models/localidad.dart';
 import '../../../shared/services/localidad_service.dart';
@@ -155,6 +156,58 @@ class _UbicacionSectionState extends State<UbicacionSection> {
     super.dispose();
   }
 
+  /// Muestra el mapa real en web/móvil. En Windows/Linux/macOS (dev desktop)
+  /// muestra un placeholder ya que el plugin no soporta esas plataformas.
+  Widget _buildMapWidget() {
+    final bool mapsSupported = kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+
+    if (!mapsSupported) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.map_outlined, size: 36, color: Colors.white24),
+            const SizedBox(height: 8),
+            Text(
+              'Mapa disponible solo en web y móvil',
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+        target: LatLng(
+          _ingresoController.incidenteActual.latitud ?? -38.9516,
+          _ingresoController.incidenteActual.longitud ?? -68.0591,
+        ),
+        zoom: 13,
+      ),
+      myLocationButtonEnabled: false,
+      mapToolbarEnabled: false,
+      zoomControlsEnabled: true,
+      markers: _ingresoController.incidenteActual.latitud != null &&
+              _ingresoController.incidenteActual.longitud != null
+          ? {
+              Marker(
+                markerId: const MarkerId('incidente_location'),
+                position: LatLng(
+                  _ingresoController.incidenteActual.latitud!,
+                  _ingresoController.incidenteActual.longitud!,
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              ),
+            }
+          : {},
+      onMapCreated: (controller) => _mapController = controller,
+      onTap: _buscarDireccionPorCoordenadas,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -284,32 +337,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(
-                    _ingresoController.incidenteActual.latitud ?? -38.9516, 
-                    _ingresoController.incidenteActual.longitud ?? -68.0591
-                  ),
-                  zoom: 13,
-                ),
-                myLocationButtonEnabled: false,
-                mapToolbarEnabled: false,
-                zoomControlsEnabled: true,
-                markers: _ingresoController.incidenteActual.latitud != null && _ingresoController.incidenteActual.longitud != null
-                    ? {
-                        Marker(
-                          markerId: const MarkerId('incidente_location'),
-                          position: LatLng(
-                            _ingresoController.incidenteActual.latitud!, 
-                            _ingresoController.incidenteActual.longitud!
-                          ),
-                          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                        ),
-                      }
-                    : {},
-                onMapCreated: (controller) => _mapController = controller,
-                onTap: _buscarDireccionPorCoordenadas,
-              ),
+              child: _buildMapWidget(),
             ),
           ),
         ),
