@@ -14,10 +14,10 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = const [
-    IngresoPage(),
-    ListadosPage(),
-    DespachoPage(),
+  final List<Widget> _pages = [
+    const IngresoPage(),
+    const ListadosPage(),
+    const DespachoPage(),
   ];
 
   void _onMenuSelected(int index) {
@@ -44,7 +44,10 @@ class _MainLayoutState extends State<MainLayout> {
               transitionBuilder: (child, animation) {
                 return FadeTransition(opacity: animation, child: child);
               },
-              child: _pages[_selectedIndex],
+              child: KeyedSubtree(
+                key: ValueKey<int>(_selectedIndex),
+                child: _pages[_selectedIndex],
+              ),
             ),
           ),
         ],
