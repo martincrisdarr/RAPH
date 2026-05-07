@@ -31,6 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
 
+  user_session_contract:
+    git:
+      url: https://github.com/Aminoacido78/UserSessionContract.git
+      ref: main
+
   raph:
     path: ../
 

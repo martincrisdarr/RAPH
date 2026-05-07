@@ -1,15 +1,68 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/components/custom_select.dart';
+import '../../../shared/models/configuracion.dart';
+import '../../../shared/models/victima.dart';
+import '../../../shared/services/configuracion_service.dart';
+import '../../../shared/services/victima_service.dart';
+import '../controllers/ingreso_controller.dart';
 
 class VictimaData {
   String id = UniqueKey().toString();
+  int? idVictima; // ID asignado por el servidor tras el primer POST
   String nombre = '';
   String edad = '';
-  String genero = '';
+  int? idConfGenero;
   String dni = '';
   String? codigoTriage; 
   List<String> sintomasSeleccionados = [];
   String busqueda = '';
+  List<PlatformFile> archivosAdjuntos = [];
+
+  /// Convierte a Victima (modelo de API) para enviar al backend.
+  Victima toVictima(int? idIncidente) {
+    return Victima(
+      idVictima: idVictima,
+      nombresApellidos: nombre.isNotEmpty ? nombre : null,
+      dni: int.tryParse(dni),
+      idConfGenero: idConfGenero,
+      edad: int.tryParse(edad),
+      estadoActual: sintomasSeleccionados.isNotEmpty
+          ? sintomasSeleccionados.join(', ')
+          : null,
+      idIncidente: idIncidente,
+    );
+  }
+
+  /// Serializa para SharedPreferences (sin archivos adjuntos).
+  Map<String, dynamic> toStorageJson() => {
+        'id': id,
+        'idVictima': idVictima,
+        'nombre': nombre,
+        'edad': edad,
+        'idConfGenero': idConfGenero,
+        'dni': dni,
+        'codigoTriage': codigoTriage,
+        'sintomasSeleccionados': sintomasSeleccionados,
+      };
+
+  /// Restaura desde SharedPreferences.
+  static VictimaData fromStorageJson(Map<String, dynamic> json) {
+    final v = VictimaData();
+    v.id = json['id'] ?? v.id;
+    v.idVictima = json['idVictima'];
+    v.nombre = json['nombre'] ?? '';
+    v.edad = json['edad'] ?? '';
+    v.idConfGenero = json['idConfGenero'];
+    v.dni = json['dni'] ?? '';
+    v.codigoTriage = json['codigoTriage'];
+    v.sintomasSeleccionados = List<String>.from(json['sintomasSeleccionados'] ?? []);
+    return v;
+  }
 }
 
 class VictimasSection extends StatefulWidget {
@@ -22,6 +75,11 @@ class VictimasSection extends StatefulWidget {
 class _VictimasSectionState extends State<VictimasSection> with TickerProviderStateMixin {
   late List<VictimaData> _victimas;
   late TabController _tabController;
+
+  final _ingresoController = IngresoController();
+  final Map<String, Timer> _debounceTimers = {};
+  static const String _storageKey = 'victimas_draft';
+  bool _localLoaded = false;
 
   final List<String> _etiquetasSintomas = [
     'Dolor de pecho',
@@ -37,6 +95,68 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
     super.initState();
     _victimas = [VictimaData()];
     _initTabController();
+    _cargarLocal();
+  }
+
+  // ── Persistencia local ────────────────────────────────────
+
+  Future<void> _cargarLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storageKey);
+    if (raw == null) return;
+    try {
+      final List<dynamic> decoded = jsonDecode(raw);
+      if (mounted && decoded.isNotEmpty) {
+        setState(() {
+          _victimas = decoded
+              .map((j) => VictimaData.fromStorageJson(j as Map<String, dynamic>))
+              .toList();
+          _tabController.dispose();
+          _initTabController();
+          _localLoaded = true;
+        });
+      } else if (mounted) {
+        setState(() => _localLoaded = true);
+      }
+    } catch (e) {
+      debugPrint('Error al cargar víctimas locales: $e');
+    }
+  }
+
+  Future<void> _guardarLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _storageKey,
+      jsonEncode(_victimas.map((v) => v.toStorageJson()).toList()),
+    );
+  }
+
+  // ── Sync al backend ───────────────────────────────────────
+
+  /// Programa un sync con debounce de 2 segundos por víctima.
+  void _programarSync(VictimaData victima) {
+    _debounceTimers[victima.id]?.cancel();
+    _debounceTimers[victima.id] = Timer(const Duration(seconds: 2), () async {
+      await _sincronizarVictima(victima);
+    });
+  }
+
+  Future<void> _sincronizarVictima(VictimaData victima) async {
+    final idIncidente = _ingresoController.incidenteActual.idIncidente;
+    final payload = victima.toVictima(idIncidente);
+
+    if (victima.idVictima == null) {
+      // Solo hacer POST si hay algún dato mínimo
+      if (victima.nombre.isEmpty && victima.dni.isEmpty && victima.idConfGenero == null) return;
+
+      final creada = await VictimaService.crear(payload);
+      if (creada != null && creada.idVictima != null && mounted) {
+        setState(() => victima.idVictima = creada.idVictima);
+        await _guardarLocal();
+      }
+    } else {
+      await VictimaService.actualizar(payload);
+    }
   }
 
   void _initTabController() {
@@ -67,6 +187,9 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
 
   @override
   void dispose() {
+    for (final t in _debounceTimers.values) {
+      t.cancel();
+    }
     _tabController.dispose();
     super.dispose();
   }
@@ -146,9 +269,11 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
   }
 
   Widget _buildVictimaTab(ThemeData theme, VictimaData victima) {
-    return Padding(
-      padding: const EdgeInsets.all(12.0),
-      child: Column(
+    return KeyedSubtree(
+      key: ValueKey('${victima.id}_$_localLoaded'),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildTriageBanner(theme, victima),
@@ -173,7 +298,65 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                FilePickerResult? result = await FilePicker.pickFiles(
+                  allowMultiple: true,
+                  type: FileType.custom,
+                  allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
+                );
+
+                if (result != null) {
+                  setState(() {
+                    victima.archivosAdjuntos.addAll(result.files);
+                  });
+                }
+              },
+              icon: const Icon(Icons.attach_file, size: 20),
+              label: const Text(
+                'Adjuntar documentación',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                foregroundColor: theme.colorScheme.primary,
+                side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+          if (victima.archivosAdjuntos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: victima.archivosAdjuntos.map((file) {
+                return Chip(
+                  label: Text(
+                    file.name,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () {
+                    setState(() {
+                      victima.archivosAdjuntos.remove(file);
+                    });
+                  },
+                  backgroundColor: theme.colorScheme.surface,
+                  side: const BorderSide(color: Colors.white24),
+                );
+              }).toList(),
+            ),
+          ],
         ],
+        ),
       ),
     );
   }
@@ -255,15 +438,22 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
 
   Widget _buildTriageOptionButton(VictimaData victima, String code, Color color) {
     final isSelected = victima.codigoTriage == code;
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isSelected ? color : color.withOpacity(0.2),
-        border: Border.all(color: color, width: 2),
+    return GestureDetector(
+      onTap: () {
+        setState(() => victima.codigoTriage = code);
+        _guardarLocal();
+        _programarSync(victima);
+      },
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isSelected ? color : color.withOpacity(0.2),
+          border: Border.all(color: color, width: 2),
+        ),
+        child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
       ),
-      child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
     );
   }
 
@@ -275,30 +465,44 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
         Expanded(
           flex: 2,
           child: TextFormField(
+            initialValue: victima.nombre,
             decoration: _compactDecoration('Nombre y apellido'),
-            onChanged: (val) => victima.nombre = val,
+            onChanged: (val) {
+              victima.nombre = val;
+              _guardarLocal();
+              _programarSync(victima);
+            },
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           flex: 1,
           child: TextFormField(
+            initialValue: victima.edad,
             decoration: _compactDecoration('Edad'),
             keyboardType: TextInputType.number,
-            onChanged: (val) => victima.edad = val,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (val) {
+              victima.edad = val;
+              _guardarLocal();
+              _programarSync(victima);
+            },
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           flex: 1,
-          child: CustomSelect<String>(
+          child: CustomSelect<Configuracion>(
             label: 'Género',
-            items: const ['Masculino', 'Femenino', 'Otro', 'No especifica'],
-            itemLabel: (item) => item,
-            initialSelection: victima.genero.isNotEmpty ? victima.genero : null,
+            fetchItems: () => ConfiguracionService.obtenerGeneros(),
+            itemLabel: (item) => item.descripcion,
+            initialSelectionId: victima.idConfGenero,
+            matchById: (item) => item.idconfiguracion,
             onSelected: (val) {
               if (val != null) {
-                victima.genero = val;
+                victima.idConfGenero = val.idconfiguracion;
+                _guardarLocal();
+                _programarSync(victima);
               }
             },
           ),
@@ -307,9 +511,15 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
         Expanded(
           flex: 1,
           child: TextFormField(
+            initialValue: victima.dni,
             decoration: _compactDecoration('DNI'),
             keyboardType: TextInputType.number,
-            onChanged: (val) => victima.dni = val,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (val) {
+              victima.dni = val;
+              _guardarLocal();
+              _programarSync(victima);
+            },
           ),
         ),
       ],
@@ -359,6 +569,8 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
                     victima.sintomasSeleccionados.add(etiqueta);
                   }
                 });
+                _guardarLocal();
+                _programarSync(victima);
               },
             );
           }).toList(),

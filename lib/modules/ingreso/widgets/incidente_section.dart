@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../controllers/ingreso_controller.dart';
 
 class IncidenteSection extends StatefulWidget {
   const IncidenteSection({super.key});
@@ -8,7 +9,8 @@ class IncidenteSection extends StatefulWidget {
 }
 
 class _IncidenteSectionState extends State<IncidenteSection> {
-  final TextEditingController _descripcionIncidenteController = TextEditingController();
+  final _ingresoController = IngresoController();
+  late final TextEditingController _descripcionIncidenteController;
   final List<Map<String, dynamic>> _etiquetasSugeridas = [
     {'nombre': 'Caída', 'color': Colors.yellow.shade300},
     {'nombre': 'Tránsito', 'color': Colors.yellow.shade300},
@@ -24,7 +26,24 @@ class _IncidenteSectionState extends State<IncidenteSection> {
   final List<String> _etiquetasSeleccionadas = [];
 
   @override
+  void initState() {
+    super.initState();
+    _descripcionIncidenteController = TextEditingController(text: _ingresoController.incidenteActual.descripcion ?? '');
+    _ingresoController.addListener(_onControllerUpdate);
+  }
+
+  void _onControllerUpdate() {
+    if (mounted) {
+      if (_descripcionIncidenteController.text.isEmpty && _ingresoController.incidenteActual.descripcion != null) {
+        _descripcionIncidenteController.text = _ingresoController.incidenteActual.descripcion!;
+      }
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    _ingresoController.removeListener(_onControllerUpdate);
     _descripcionIncidenteController.dispose();
     super.dispose();
   }
@@ -41,6 +60,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
             maxLines: null,
             expands: true,
             textAlignVertical: TextAlignVertical.top,
+            onChanged: (val) => _ingresoController.updateIncidente(descripcion: val),
             decoration: const InputDecoration(
               labelText: 'Descripción del incidente',
               alignLabelWithHint: true,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 /// Componente de búsqueda typeahead/autocomplete genérico.
 /// Llama a [fetchSuggestions] cada vez que el usuario escribe (con debounce),
@@ -97,9 +98,24 @@ class _AutocompleteSelectState<T extends Object> extends State<AutocompleteSelec
     final theme = Theme.of(context);
 
     return Autocomplete<T>(
+      initialValue: TextEditingValue(
+        text: widget.initialSelection != null ? widget.itemLabel(widget.initialSelection as T) : '',
+      ),
       optionsBuilder: (TextEditingValue textEditingValue) async {
         if (textEditingValue.text.length < 2) return const [];
-        return widget.fetchSuggestions(textEditingValue.text);
+
+        // Debounce: cancelar el timer anterior y esperar que el usuario deje de escribir
+        _debounce?.cancel();
+        final completer = Completer<List<T>>();
+        _debounce = Timer(Duration(milliseconds: widget.debounceMs), () async {
+          try {
+            final results = await widget.fetchSuggestions(textEditingValue.text);
+            if (!completer.isCompleted) completer.complete(results);
+          } catch (_) {
+            if (!completer.isCompleted) completer.complete([]);
+          }
+        });
+        return completer.future;
       },
       displayStringForOption: widget.itemLabel,
       onSelected: (T item) {
@@ -108,50 +124,52 @@ class _AutocompleteSelectState<T extends Object> extends State<AutocompleteSelec
       optionsViewBuilder: (context, onSelected, options) {
         return Align(
           alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(8),
-            color: theme.scaffoldBackgroundColor,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white24, width: 1),
-              ),
-              constraints: const BoxConstraints(maxHeight: 220),
-              child: options.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'Sin resultados',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.white54,
+          child: PointerInterceptor(
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(8),
+              color: theme.scaffoldBackgroundColor,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24, width: 1),
+                ),
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: options.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'Sin resultados',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white54,
+                          ),
                         ),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      itemCount: options.length,
-                      itemBuilder: (context, index) {
-                        final item = options.elementAt(index);
-                        return InkWell(
-                          onTap: () => onSelected(item),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            child: Text(
-                              widget.itemLabel(item),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.white,
+                      )
+                    : ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final item = options.elementAt(index);
+                          return InkWell(
+                            onTap: () => onSelected(item),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              child: Text(
+                                widget.itemLabel(item),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+              ),
             ),
           ),
         );

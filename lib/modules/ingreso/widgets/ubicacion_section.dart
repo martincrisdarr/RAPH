@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../shared/models/localidad.dart';
 import '../../../shared/services/localidad_service.dart';
 import '../../../shared/components/autocomplete_select.dart';
+import '../controllers/ingreso_controller.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../shared/services/geocoding_service.dart';
 
 class UbicacionSection extends StatefulWidget {
   const UbicacionSection({super.key});
@@ -12,10 +15,142 @@ class UbicacionSection extends StatefulWidget {
 
 class _UbicacionSectionState extends State<UbicacionSection> {
   bool _isLinkMode = false;
-  final TextEditingController _domicilioController = TextEditingController();
+  final _ingresoController = IngresoController();
+  late final TextEditingController _domicilioController;
+  GoogleMapController? _mapController;
+  bool _isLoadingMap = false;
+  Localidad? _localidadSeleccionada = _neuquenDefault;
+
+  static final Localidad _neuquenDefault = Localidad(
+    id: 580056,
+    descripcion: "Neuquén",
+    nombreCompleto: "Municipio Neuquén",
+    categoria: "Municipio",
+    provinciaId: "58",
+    provinciaNombre: "Neuquén",
+  );
+
+  /// Parsea coordenadas del parámetro ?q=lat,lng de un link de Google Maps.
+  /// Soporta formatos como:
+  ///   https://www.google.com/maps?q=-38.95,-68.06&z=17&hl=es
+  ///   https://maps.google.com/?q=-38.95,-68.06
+  LatLng? _parseCoordsFromUrl(String url) {
+    try {
+      final uri = Uri.parse(url.trim());
+      final q = uri.queryParameters['q'];
+      if (q != null && q.contains(',')) {
+        final parts = q.split(',');
+        if (parts.length >= 2) {
+          final lat = double.tryParse(parts[0].trim());
+          final lng = double.tryParse(parts[1].trim());
+          if (lat != null && lng != null) return LatLng(lat, lng);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _buscarDireccionEnMapa() async {
+    final texto = _domicilioController.text.trim();
+    if (texto.isEmpty) return;
+
+    setState(() => _isLoadingMap = true);
+
+    LatLng? coords;
+
+    if (_isLinkMode) {
+      // Modo link: parsear coordenadas del URL de WhatsApp/Google Maps
+      coords = _parseCoordsFromUrl(texto);
+      if (coords == null) {
+        setState(() => _isLoadingMap = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo leer el link. Verificá que sea un link de Google Maps válido.')),
+          );
+        }
+        return;
+      }
+    } else {
+      // Modo normal: geocoding por texto de dirección
+      coords = await GeocodingService.getCoordinatesFromAddress(
+        texto,
+        localidad: _localidadSeleccionada?.descripcion,
+      );
+    }
+
+    if (coords != null) {
+      // Mover la cámara del mapa
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(coords, 16));
+      _ingresoController.updateIncidente(
+        latitud: coords.latitude,
+        longitud: coords.longitude,
+      );
+
+      // En ambos modos, intentar obtener la dirección por reverse geocoding
+      final address = await GeocodingService.getAddressFromCoordinates(
+        coords.latitude,
+        coords.longitude,
+      );
+      setState(() => _isLoadingMap = false);
+
+      if (address != null) {
+        // Autocompletar el domicilio y salir del modo link
+        _domicilioController.text = address;
+        _ingresoController.updateIncidente(direccion: address);
+        if (_isLinkMode) {
+          setState(() => _isLinkMode = false);
+        }
+      }
+      // Sincronizar con el backend con los datos finales del mapa
+      await _ingresoController.syncIncidenteDesdeGoogleMaps();
+    } else {
+      setState(() => _isLoadingMap = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se encontró la dirección')),
+        );
+      }
+    }
+  }
+
+  Future<void> _buscarDireccionPorCoordenadas(LatLng coords) async {
+    _ingresoController.updateIncidente(
+      latitud: coords.latitude,
+      longitud: coords.longitude,
+    );
+    
+    setState(() => _isLoadingMap = true);
+    final address = await GeocodingService.getAddressFromCoordinates(coords.latitude, coords.longitude);
+    setState(() => _isLoadingMap = false);
+
+    if (address != null) {
+      _domicilioController.text = address;
+      _ingresoController.updateIncidente(direccion: address);
+    }
+
+    // Sincronizar con el backend: se tiene latitud y longitud confirmadas del mapa
+    await _ingresoController.syncIncidenteDesdeGoogleMaps();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _domicilioController = TextEditingController(text: _ingresoController.incidenteActual.direccion ?? '');
+    _ingresoController.addListener(_onControllerUpdate);
+  }
+
+  void _onControllerUpdate() {
+    if (mounted) {
+      if (_domicilioController.text.isEmpty && _ingresoController.incidenteActual.direccion != null) {
+        _domicilioController.text = _ingresoController.incidenteActual.direccion!;
+      }
+      setState(() {});
+    }
+  }
 
   @override
   void dispose() {
+    _ingresoController.removeListener(_onControllerUpdate);
     _domicilioController.dispose();
     super.dispose();
   }
@@ -36,6 +171,8 @@ class _UbicacionSectionState extends State<UbicacionSection> {
               flex: 3,
               child: TextFormField(
                 controller: _domicilioController,
+                onChanged: (val) => _ingresoController.updateIncidente(direccion: val),
+                onFieldSubmitted: (_) => _buscarDireccionEnMapa(),
                 decoration: InputDecoration(
                   labelText: _isLinkMode ? 'Pegá el link de WhatsApp...' : 'Domicilio *',
                   labelStyle: TextStyle(
@@ -104,11 +241,16 @@ class _UbicacionSectionState extends State<UbicacionSection> {
               flex: 2,
               child: AutocompleteSelect<Localidad>(
                 label: 'Buscar localidad...',
+                initialSelection: _ingresoController.incidenteActual.idLocalidad == 580056 
+                    ? _neuquenDefault 
+                    : null,
+                debounceMs: 500,
                 fetchSuggestions: (query) => LocalidadService.buscar(query),
                 itemLabel: (item) => item.descripcion,
                 onSelected: (item) {
                   if (item != null) {
-                    debugPrint('Localidad seleccionada: ${item.id} - ${item.nombreCompleto}');
+                    setState(() => _localidadSeleccionada = item);
+                    _ingresoController.updateIncidente(idLocalidad: item.id);
                   }
                 },
               ),
@@ -117,7 +259,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
             SizedBox(
               height: 46,
               child: OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: _buscarDireccionEnMapa,
                 icon: const Icon(Icons.map_outlined),
                 label: const Text('Ver en el mapa'),
                 style: OutlinedButton.styleFrom(
@@ -140,18 +282,47 @@ class _UbicacionSectionState extends State<UbicacionSection> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.white10),
             ),
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.map, color: Colors.white24, size: 40),
-                  SizedBox(height: 8),
-                  Text('Google Maps', style: TextStyle(color: Colors.white24)),
-                ],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: LatLng(
+                    _ingresoController.incidenteActual.latitud ?? -38.9516, 
+                    _ingresoController.incidenteActual.longitud ?? -68.0591
+                  ),
+                  zoom: 13,
+                ),
+                myLocationButtonEnabled: false,
+                mapToolbarEnabled: false,
+                zoomControlsEnabled: true,
+                markers: _ingresoController.incidenteActual.latitud != null && _ingresoController.incidenteActual.longitud != null
+                    ? {
+                        Marker(
+                          markerId: const MarkerId('incidente_location'),
+                          position: LatLng(
+                            _ingresoController.incidenteActual.latitud!, 
+                            _ingresoController.incidenteActual.longitud!
+                          ),
+                          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                        ),
+                      }
+                    : {},
+                onMapCreated: (controller) => _mapController = controller,
+                onTap: _buscarDireccionPorCoordenadas,
               ),
             ),
           ),
         ),
+        if (_isLoadingMap)
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
+            child: Center(
+              child: SizedBox(
+                width: 24, height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
       ],
     );
   }
