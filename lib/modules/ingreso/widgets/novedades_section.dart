@@ -111,13 +111,14 @@ class _NovedadesSectionState extends State<NovedadesSection> {
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOut,
-        );
-      }
+      if (!_scrollController.hasClients) return;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      if (!maxExtent.isFinite) return;
+      _scrollController.animateTo(
+        maxExtent,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -287,91 +288,67 @@ class _MensajeBubble extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: IntrinsicHeight(
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 160),
-            decoration: BoxDecoration(
-              color: const Color(0xFF163547),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 160),
+          decoration: BoxDecoration(
+            color: const Color(0xFF163547),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(12),
+              bottomLeft: Radius.circular(12),
+              bottomRight: Radius.circular(12),
+            ),
+            border: Border(
+              left: BorderSide(
+                color: isPending ? Colors.white24 : theme.colorScheme.primary,
+                width: 3,
               ),
             ),
-            child: Row(
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+            child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Acento izquierdo
-                Container(
-                  width: 3,
-                  decoration: BoxDecoration(
-                    color: isPending
-                        ? Colors.white24
-                        : theme.colorScheme.primary,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(4),
-                      bottomLeft: Radius.circular(12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      remitente,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isPending ? Colors.white38 : theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 16),
+                    Text(
+                      hora,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                    if (isPending) ...[
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: Colors.white38,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                // Contenido
-                Flexible(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Fila: nombre + hora + indicador pending
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              remitente,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: isPending
-                                    ? Colors.white38
-                                    : theme.colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              hora,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: Colors.white38,
-                                fontSize: 11,
-                              ),
-                            ),
-                            if (isPending) ...[
-                              const SizedBox(width: 8),
-                              const SizedBox(
-                                width: 10,
-                                height: 10,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  color: Colors.white38,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        // Texto
-                        Text(
-                          texto,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white.withValues(
-                              alpha: isPending ? 0.5 : 0.87,
-                            ),
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  texto,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: isPending ? 0.5 : 0.87),
+                    height: 1.4,
                   ),
                 ),
               ],

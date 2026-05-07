@@ -15,7 +15,9 @@ class AutoLoginSession implements IUserSession {
   @override Future<void> logout() async => debugPrint("Simulated Logout");
 }
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   // Simulamos un inicio de sesión predeterminado para el modo de desarrollo (Standalone)
   final simulatedUser = UserData(
     nombre: 'dev12345',
