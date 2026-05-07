@@ -7,7 +7,7 @@ class VictimaData {
   String edad = '';
   String genero = '';
   String dni = '';
-  String? codigoTriage; // 'Rojo', 'Amarillo', 'Verde'
+  String? codigoTriage; 
   List<String> sintomasSeleccionados = [];
   String busqueda = '';
 }
@@ -78,7 +78,6 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Tabs
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: const BoxDecoration(
@@ -126,7 +125,6 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
             ],
           ),
         ),
-        // Tab content
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -155,10 +153,8 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
         children: [
           _buildTriageBanner(theme, victima),
           const SizedBox(height: 16),
-          // Datos básicos (en una línea)
           _buildDatosRow(theme, victima),
           const SizedBox(height: 24),
-          // Buscador / Etiquetas y Preguntas / Recomendaciones
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,7 +224,6 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
           if (victima.codigoTriage == 'Rojo') ...[
             ElevatedButton.icon(
               onPressed: () {
-                // Lógica para despacho inmediato
               },
               icon: const Icon(Icons.airport_shuttle, size: 18),
               label: const Text('DESPACHO INMEDIATO'),
@@ -379,7 +374,6 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white10),
       ),
-      // Mock content para las preguntas/recomendaciones basadas en síntomas
       child: victima.sintomasSeleccionados.isNotEmpty || victima.busqueda.isNotEmpty
           ? _buildPreguntasSintomas(theme, victima)
           : const Center(
@@ -396,7 +390,6 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
   }
 
   Widget _buildPreguntasSintomas(ThemeData theme, VictimaData victima) {
-    // Esto es un mock para mostrar cómo se verían las preguntas basadas en el síntoma
     return Column(
       children: [
         Container(
