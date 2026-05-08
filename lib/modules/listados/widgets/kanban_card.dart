@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-class KanbanCard extends StatelessWidget {
+class KanbanCard extends StatefulWidget {
   final String title;
   final String subtitle;
   final String time;
   final String priority;
   final Color priorityColor;
   final String movil;
+  final Function(MouseCursor) onCursorChange;
 
   const KanbanCard({
     super.key,
@@ -14,9 +15,18 @@ class KanbanCard extends StatelessWidget {
     required this.subtitle,
     required this.time,
     required this.movil,
+    required this.onCursorChange,
     this.priority = 'Media',
     this.priorityColor = Colors.orange,
   });
+
+  @override
+  State<KanbanCard> createState() => _KanbanCardState();
+}
+
+class _KanbanCardState extends State<KanbanCard> {
+  bool _isDragging = false;
+  bool _isPressed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -47,9 +57,9 @@ class KanbanCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: priorityColor.withOpacity(0.15),
+                  color: widget.priorityColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: priorityColor.withOpacity(0.4), width: 1),
+                  border: Border.all(color: widget.priorityColor.withOpacity(0.4), width: 1),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -58,18 +68,18 @@ class KanbanCard extends StatelessWidget {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: priorityColor,
+                        color: widget.priorityColor,
                         shape: BoxShape.circle,
                         boxShadow: [
-                          BoxShadow(color: priorityColor.withOpacity(0.5), blurRadius: 4),
+                          BoxShadow(color: widget.priorityColor.withOpacity(0.5), blurRadius: 4),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      priority,
+                      widget.priority,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: priorityColor,
+                        color: widget.priorityColor,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.5,
                       ),
@@ -78,14 +88,14 @@ class KanbanCard extends StatelessWidget {
                 ),
               ),
               Text(
-                time,
+                widget.time,
                 style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            title,
+            widget.title,
             style: theme.textTheme.titleMedium?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -93,7 +103,7 @@ class KanbanCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            subtitle,
+            widget.subtitle,
             style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
           ),
           const SizedBox(height: 16),
@@ -113,7 +123,7 @@ class KanbanCard extends StatelessWidget {
                     Icon(Icons.local_shipping, size: 14, color: theme.colorScheme.primary),
                     const SizedBox(width: 6),
                     Text(
-                      movil,
+                      widget.movil,
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -130,25 +140,63 @@ class KanbanCard extends StatelessWidget {
       ),
     );
 
-    return Draggable<String>(
-      data: title,
-      feedback: Material(
-        color: Colors.transparent,
-        child: Opacity(
-          opacity: 0.8,
-          child: cardContent,
+    return Listener(
+      onPointerDown: (_) {
+        setState(() => _isPressed = true);
+        widget.onCursorChange(SystemMouseCursors.grabbing);
+      },
+      onPointerUp: (_) {
+        setState(() => _isPressed = false);
+        if (!_isDragging) {
+          widget.onCursorChange(SystemMouseCursors.basic);
+        }
+      },
+      child: Draggable<String>(
+        data: widget.title,
+        onDragStarted: () {
+          setState(() => _isDragging = true);
+          widget.onCursorChange(SystemMouseCursors.grabbing);
+        },
+        onDragEnd: (_) {
+          setState(() {
+            _isDragging = false;
+            _isPressed = false;
+          });
+          widget.onCursorChange(SystemMouseCursors.basic);
+        },
+        onDraggableCanceled: (_, __) {
+          setState(() {
+            _isDragging = false;
+            _isPressed = false;
+          });
+          widget.onCursorChange(SystemMouseCursors.basic);
+        },
+        feedback: Material(
+          color: Colors.transparent,
+          child: Opacity(
+            opacity: 0.8,
+            child: cardContent,
+          ),
         ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.3,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: cardContent,
+        childWhenDragging: Opacity(
+          opacity: 0.3,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: cardContent,
+          ),
         ),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: cardContent,
+        child: MouseRegion(
+          onEnter: (_) => widget.onCursorChange(SystemMouseCursors.grab),
+          onExit: (_) {
+            if (!_isPressed && !_isDragging) {
+              widget.onCursorChange(SystemMouseCursors.basic);
+            }
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: cardContent,
+          ),
+        ),
       ),
     );
   }
