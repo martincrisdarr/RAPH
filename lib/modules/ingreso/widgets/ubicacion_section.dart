@@ -87,20 +87,20 @@ class _UbicacionSectionState extends State<UbicacionSection> {
         longitud: coords.longitude,
       );
 
-      // En ambos modos, intentar obtener la dirección por reverse geocoding
-      final address = await GeocodingService.getAddressFromCoordinates(
-        coords.latitude,
-        coords.longitude,
-      );
       setState(() => _isLoadingMap = false);
 
-      if (address != null) {
-        // Autocompletar el domicilio y salir del modo link
-        _domicilioController.text = address;
-        _ingresoController.updateIncidente(direccion: address);
-        if (_isLinkMode) {
+      if (_isLinkMode) {
+        final address = await GeocodingService.getAddressFromCoordinates(
+          coords.latitude,
+          coords.longitude,
+        );
+        if (address != null) {
+          _domicilioController.text = address;
+          _ingresoController.updateIncidente(direccion: address);
           setState(() => _isLinkMode = false);
         }
+      } else {
+        _ingresoController.updateIncidente(direccion: texto);
       }
       // Sincronizar con el backend con los datos finales del mapa
       await _ingresoController.syncIncidenteDesdeGoogleMaps();
@@ -108,7 +108,13 @@ class _UbicacionSectionState extends State<UbicacionSection> {
       setState(() => _isLoadingMap = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se encontró la dirección')),
+          SnackBar(
+            content: Text(
+              _localidadSeleccionada != null
+                  ? 'No se encontró la dirección en ${_localidadSeleccionada!.descripcion}'
+                  : 'No se encontró la dirección',
+            ),
+          ),
         );
       }
     }
