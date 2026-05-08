@@ -6,10 +6,17 @@ import '../../config/constants.dart';
 class GeocodingService {
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/geocode/json';
 
+  static String _normalize(String input) {
+    return input.toLowerCase()
+        .replaceAll('á', 'a').replaceAll('é', 'e').replaceAll('í', 'i')
+        .replaceAll('ó', 'o').replaceAll('ú', 'u');
+  }
+
   static Future<LatLng?> getCoordinatesFromAddress(String address, {String? localidad}) async {
     if (address.trim().isEmpty) return null;
     
     final String loc = (localidad != null && localidad.isNotEmpty) ? localidad : 'Neuquén';
+    // Removemos coma para buscar de forma más amplia si usamos filter
     final query = Uri.encodeComponent('$address, $loc, Argentina');
     final url = '$_baseUrl?address=$query&key=${AppConstants.googleMapsApiKey}';
 
@@ -18,6 +25,16 @@ class GeocodingService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final String fullAddress = data['results'][0]['formatted_address'];
+          
+          // Verificamos que el resultado contenga la localidad seleccionada
+          final String normAddress = _normalize(fullAddress);
+          final String normLoc = _normalize(loc);
+          
+          if (!normAddress.contains(normLoc)) {
+            return null;
+          }
+
           final location = data['results'][0]['geometry']['location'];
           return LatLng(location['lat'], location['lng']);
         }

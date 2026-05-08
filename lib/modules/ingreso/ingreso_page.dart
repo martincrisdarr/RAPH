@@ -71,7 +71,7 @@ class _IngresoPageState extends State<IngresoPage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const Expanded(
-                              flex: 3,
+                              flex: 2,
                               child: IngresoSectionCard(title: 'INCIDENTE', child: IncidenteSection()),
                             ),
                             const SizedBox(width: 16),
