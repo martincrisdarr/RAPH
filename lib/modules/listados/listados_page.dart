@@ -37,7 +37,9 @@ class _ListadosPageState extends State<ListadosPage> {
   // Estado de carga y datos de API
   bool _isLoading = false;
   List<Map<String, dynamic>> _rawDemandas = [];
-  List<Map<String, dynamic>> _rawLlamadas = [];
+
+  // Estado del cursor global
+  MouseCursor _boardCursor = SystemMouseCursors.basic;
 
   // Estado de los filtros
   bool _isFilterVisible = false;
@@ -53,22 +55,19 @@ class _ListadosPageState extends State<ListadosPage> {
   }
 
   Future<void> _cargarDatos() async {
-    debugPrint('🚀 INICIANDO LLAMADA GET: Cargando datos de Demandas y Llamadas...');
+    debugPrint('🚀 INICIANDO LLAMADA GET: Cargando datos de Demandas...');
     setState(() => _isLoading = true);
     try {
-      // Dejamos la conexión lista llamando a los endpoints seleccionados
       final results = await Future.wait([
         ListadosService.obtenerDemandasRecibidas(),
-        ListadosService.obtenerLlamadas(),
       ]);
 
       setState(() {
         _rawDemandas = results[0];
-        _rawLlamadas = results[1];
         _isLoading = false;
       });
       
-      print('Conexión lista: ${_rawDemandas.length} demandas y ${_rawLlamadas.length} llamadas cargadas.');
+      print('Conexión lista: ${_rawDemandas.length} demandas cargadas.');
     } catch (e) {
       setState(() => _isLoading = false);
       print('Error al precargar datos de API: $e');
@@ -167,6 +166,12 @@ class _ListadosPageState extends State<ListadosPage> {
     });
   }
 
+  void _updateGlobalCursor(MouseCursor cursor) {
+    setState(() {
+      _boardCursor = cursor;
+    });
+  }
+
   Future<void> _selectDate(BuildContext context, bool isDesde) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -202,92 +207,95 @@ class _ListadosPageState extends State<ListadosPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return Stack(
-      children: [
-        // Tablero Kanban (Fondo)
-        Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Tablero de Seguimiento',
-                            style: theme.textTheme.headlineMedium,
-                          ),
-                          if (_isLoading) ...[
-                            const SizedBox(width: 16),
-                            const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Gestión visual de incidentes y despachos activos.',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => setState(() => _isFilterVisible = !_isFilterVisible),
-                    icon: Icon(_isFilterVisible ? Icons.filter_list_off : Icons.filter_list),
-                    label: Text(_isFilterVisible ? 'Ocultar Filtros' : 'Mostrar Filtros'),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
-                      foregroundColor: theme.colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return MouseRegion(
+      cursor: _boardCursor,
+      child: Stack(
+        children: [
+          // Tablero Kanban (Fondo)
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildColumn('En curso'),
-                    _buildColumn('Despachado'),
-                    _buildColumn('En sitio'),
-                    _buildColumn('Traslado'),
-                    _buildColumn('Arribado'),
-                    _buildColumn('Finalizado'),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Tablero de Seguimiento',
+                              style: theme.textTheme.headlineMedium,
+                            ),
+                            if (_isLoading) ...[
+                              const SizedBox(width: 16),
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Gestión visual de incidentes y despachos activos.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() => _isFilterVisible = !_isFilterVisible),
+                      icon: Icon(_isFilterVisible ? Icons.filter_list_off : Icons.filter_list),
+                      label: Text(_isFilterVisible ? 'Ocultar Filtros' : 'Mostrar Filtros'),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+                        foregroundColor: theme.colorScheme.primary,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 32),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildColumn('En curso'),
+                      _buildColumn('Despachado'),
+                      _buildColumn('En sitio'),
+                      _buildColumn('Traslado'),
+                      _buildColumn('Arribado'),
+                      _buildColumn('Finalizado'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        
-        // Panel de Filtros Flotante (Derecha)
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          right: _isFilterVisible ? 0 : -300,
-          top: 0,
-          bottom: 0,
-          child: FilterSidebar(
-            selectedMovil: _selectedMovil,
-            onMovilChanged: (val) => setState(() => _selectedMovil = val),
-            selectedCodigo: _selectedCodigo,
-            onCodigoChanged: (val) => setState(() => _selectedCodigo = val),
-            fechaDesde: _fechaDesde,
-            fechaHasta: _fechaHasta,
-            onSelectFechaDesde: () => _selectDate(context, true),
-            onSelectFechaHasta: () => _selectDate(context, false),
-            onClose: () => setState(() => _isFilterVisible = false),
+          
+          // Panel de Filtros Flotante (Derecha)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            right: _isFilterVisible ? 0 : -300,
+            top: 0,
+            bottom: 0,
+            child: FilterSidebar(
+              selectedMovil: _selectedMovil,
+              onMovilChanged: (val) => setState(() => _selectedMovil = val),
+              selectedCodigo: _selectedCodigo,
+              onCodigoChanged: (val) => setState(() => _selectedCodigo = val),
+              fechaDesde: _fechaDesde,
+              fechaHasta: _fechaHasta,
+              onSelectFechaDesde: () => _selectDate(context, true),
+              onSelectFechaHasta: () => _selectDate(context, false),
+              onClose: () => setState(() => _isFilterVisible = false),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -306,6 +314,7 @@ class _ListadosPageState extends State<ListadosPage> {
           movil: item.movil,
           priority: item.priority,
           priorityColor: item.priorityColor,
+          onCursorChange: _updateGlobalCursor,
         )).toList(),
       ),
     );

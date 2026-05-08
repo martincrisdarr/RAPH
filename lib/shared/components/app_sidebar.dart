@@ -19,7 +19,7 @@ class AppSidebar extends StatelessWidget {
 
   final List<SidebarItem> _items = [
     SidebarItem(icon: Icons.add_box_rounded, label: 'Ingreso'),
-    SidebarItem(icon: Icons.list_alt_rounded, label: 'Listado'),
+    SidebarItem(icon: Icons.list_alt_rounded, label: 'Tablero'),
     SidebarItem(icon: Icons.local_shipping_rounded, label: 'Despacho'),
   ];
 
