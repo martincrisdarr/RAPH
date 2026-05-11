@@ -3,6 +3,7 @@ import '../shared/components/app_sidebar.dart';
 import '../modules/ingreso/ingreso_page.dart';
 import '../modules/listados/listados_page.dart';
 import '../modules/despacho/despacho_page.dart';
+import '../modules/configuraciones/configuraciones_page.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -14,10 +15,11 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = [
+  List<Widget> get _pages => [
     const IngresoPage(),
     const ListadosPage(),
     const DespachoPage(),
+    const ConfiguracionesPage(),
   ];
 
   void _onMenuSelected(int index) {

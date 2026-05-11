@@ -148,9 +148,19 @@ class _UbicacionSectionState extends State<UbicacionSection> {
 
   void _onControllerUpdate() {
     if (mounted) {
-      if (_domicilioController.text.isEmpty && _ingresoController.incidenteActual.direccion != null) {
-        _domicilioController.text = _ingresoController.incidenteActual.direccion!;
+      final incidente = _ingresoController.incidenteActual;
+      
+      final nuevaDireccion = incidente.direccion ?? '';
+      if (_domicilioController.text != nuevaDireccion && !_isLinkMode) {
+        _domicilioController.text = nuevaDireccion;
       }
+
+      // Si cargamos una demanda con coordenadas, movemos el mapa
+      if (incidente.latitud != null && incidente.longitud != null) {
+        final pos = LatLng(incidente.latitud!, incidente.longitud!);
+        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(pos, 16));
+      }
+
       setState(() {});
     }
   }

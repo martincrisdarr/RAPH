@@ -35,6 +35,33 @@ class _NovedadesSectionState extends State<NovedadesSection> {
   void initState() {
     super.initState();
     _cargarLocal();
+    _ingresoController.addListener(_onControllerUpdate);
+  }
+
+  int? _lastIncidenteId;
+
+  void _onControllerUpdate() {
+    final incidente = _ingresoController.incidenteActual;
+    
+    // Si el ID del incidente cambió
+    if (incidente.idIncidente != _lastIncidenteId) {
+      _lastIncidenteId = incidente.idIncidente;
+      
+      if (incidente.novedades != null && incidente.novedades!.isNotEmpty) {
+        setState(() {
+          _novedades.clear();
+          _novedades.addAll(incidente.novedades!);
+          _pendingIndexes.clear();
+        });
+        _scrollToBottom();
+      } else {
+        // Reset si el nuevo incidente no tiene novedades
+        setState(() {
+          _novedades.clear();
+          _pendingIndexes.clear();
+        });
+      }
+    }
   }
 
   // ── Persistencia local ────────────────────────────────────
@@ -127,6 +154,7 @@ class _NovedadesSectionState extends State<NovedadesSection> {
 
   @override
   void dispose() {
+    _ingresoController.removeListener(_onControllerUpdate);
     _inputController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();

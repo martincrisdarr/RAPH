@@ -1,3 +1,6 @@
+import 'victima.dart';
+import 'novedad.dart';
+
 class Incidente {
   final int? idIncidente;
   final String? direccion;
@@ -7,6 +10,8 @@ class Incidente {
   final String? direccionAuto;
   final String? descripcion;
   final DateTime? fechaHoraAuto;
+  final List<Victima>? victimas;
+  final List<Novedad>? novedades;
 
   Incidente({
     this.idIncidente,
@@ -17,6 +22,8 @@ class Incidente {
     this.direccionAuto,
     this.descripcion,
     this.fechaHoraAuto,
+    this.victimas,
+    this.novedades,
   });
 
   factory Incidente.fromJson(Map<String, dynamic> json) {
@@ -29,6 +36,8 @@ class Incidente {
       direccionAuto: json['direccion_auto'],
       descripcion: json['descripcion'],
       fechaHoraAuto: json['fechahoraauto'] != null ? DateTime.tryParse(json['fechahoraauto']) : null,
+      victimas: json['victimas'] != null ? (json['victimas'] as List).map((v) => Victima.fromJson(v)).toList() : null,
+      novedades: json['novedades'] != null ? (json['novedades'] as List).map((n) => Novedad.fromJson(n)).toList() : null,
     );
   }
 
@@ -42,6 +51,8 @@ class Incidente {
     if (direccionAuto != null) map['direccion_auto'] = direccionAuto;
     if (descripcion != null) map['descripcion'] = descripcion;
     if (fechaHoraAuto != null) map['fechahoraauto'] = fechaHoraAuto?.toIso8601String();
+    if (victimas != null) map['victimas'] = victimas?.map((v) => v.toJson()).toList();
+    if (novedades != null) map['novedades'] = novedades?.map((n) => n.toJson()).toList();
     return map;
   }
 
@@ -54,6 +65,8 @@ class Incidente {
     String? direccionAuto,
     String? descripcion,
     DateTime? fechaHoraAuto,
+    List<Victima>? victimas,
+    List<Novedad>? novedades,
   }) {
     return Incidente(
       idIncidente: idIncidente ?? this.idIncidente,
@@ -64,6 +77,8 @@ class Incidente {
       direccionAuto: direccionAuto ?? this.direccionAuto,
       descripcion: descripcion ?? this.descripcion,
       fechaHoraAuto: fechaHoraAuto ?? this.fechaHoraAuto,
+      victimas: victimas ?? this.victimas,
+      novedades: novedades ?? this.novedades,
     );
   }
 }
