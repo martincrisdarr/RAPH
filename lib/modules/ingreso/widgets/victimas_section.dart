@@ -303,7 +303,7 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               onPressed: () async {
-                FilePickerResult? result = await FilePicker.pickFiles(
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
                   allowMultiple: true,
                   type: FileType.custom,
                   allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
@@ -352,7 +352,7 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
                   backgroundColor: theme.colorScheme.surface,
                   side: const BorderSide(color: Colors.white24),
                 );
-              }).toList(),
+              }).toList().cast<Widget>(),
             ),
           ],
         ],

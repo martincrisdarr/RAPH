@@ -9,6 +9,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  user_session_contract:
+    git:
+      url: https://github.com/Aminoacido78/UserSessionContract.git
+      ref: main
+  file_picker: ^8.0.0
+  pointer_interceptor: ^0.10.1
+  audioplayers: ^6.0.0
+  shared_preferences: ^2.2.0
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:

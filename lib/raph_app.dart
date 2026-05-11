@@ -18,7 +18,7 @@ class RaphApp extends StatelessWidget {
     return MaterialApp(
       title: 'RAPH - Despacho de Ambulancias',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: buildAppTheme(),
       home: const MainLayout(),
     );
   }
