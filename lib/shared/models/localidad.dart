@@ -33,6 +33,18 @@ class Localidad {
   bool operator ==(Object other) =>
       identical(this, other) || other is Localidad && other.id == id;
 
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'descripcion': descripcion,
+      'nombre_completo': nombreCompleto,
+      'categoria': categoria,
+      'provincia_id': provinciaId,
+      'provincia_nombre': provinciaNombre,
+    };
+  }
+
   @override
   int get hashCode => id.hashCode;
 }

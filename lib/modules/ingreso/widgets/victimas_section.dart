@@ -63,6 +63,21 @@ class VictimaData {
     v.sintomasSeleccionados = List<String>.from(json['sintomasSeleccionados'] ?? []);
     return v;
   }
+
+  /// Crea VictimaData a partir de un modelo Victima de la API.
+  static VictimaData fromVictima(Victima victima) {
+    final v = VictimaData();
+    v.idVictima = victima.idVictima;
+    v.nombre = victima.nombresApellidos ?? '';
+    v.edad = victima.edad?.toString() ?? '';
+    v.idConfGenero = victima.idConfGenero;
+    v.dni = victima.dni?.toString() ?? '';
+    // Mapeo simple de estadoActual a síntomas seleccionados
+    if (victima.estadoActual != null && victima.estadoActual!.isNotEmpty) {
+      v.sintomasSeleccionados = victima.estadoActual!.split(',').map((s) => s.trim()).toList();
+    }
+    return v;
+  }
 }
 
 class VictimasSection extends StatefulWidget {
@@ -96,6 +111,33 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
     _victimas = [VictimaData()];
     _initTabController();
     _cargarLocal();
+    _ingresoController.addListener(_onControllerUpdate);
+  }
+
+  int? _lastIncidenteId;
+
+  void _onControllerUpdate() {
+    final incidente = _ingresoController.incidenteActual;
+    
+    // Si el ID del incidente cambió (o pasó de tener ID a ser nulo)
+    if (incidente.idIncidente != _lastIncidenteId) {
+      _lastIncidenteId = incidente.idIncidente;
+      
+      if (incidente.victimas != null && incidente.victimas!.isNotEmpty) {
+        setState(() {
+          _victimas = incidente.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
+          _tabController.dispose();
+          _initTabController();
+        });
+      } else {
+        // Reset a estado inicial si el nuevo incidente no tiene víctimas
+        setState(() {
+          _victimas = [VictimaData()];
+          _tabController.dispose();
+          _initTabController();
+        });
+      }
+    }
   }
 
   // ── Persistencia local ────────────────────────────────────
@@ -187,6 +229,7 @@ class _VictimasSectionState extends State<VictimasSection> with TickerProviderSt
 
   @override
   void dispose() {
+    _ingresoController.removeListener(_onControllerUpdate);
     for (final t in _debounceTimers.values) {
       t.cancel();
     }

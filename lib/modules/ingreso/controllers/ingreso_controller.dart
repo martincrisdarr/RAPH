@@ -106,7 +106,6 @@ class IngresoController extends ChangeNotifier {
 
     _guardarBorrador();
     notifyListeners();
-    _programarGuardadoRemoto();
     // Si viene descripcion, también programar sync del incidente
     if (descripcion != null) {
       _programarGuardadoRemotoIncidente();
@@ -163,11 +162,31 @@ class IngresoController extends ChangeNotifier {
       final creado = await IncidenteService.crear(_incidenteActual);
       if (creado != null && creado.idIncidente != null) {
         _incidenteActual = _incidenteActual.copyWith(idIncidente: creado.idIncidente);
+        // Vinculamos el incidente con la demanda
+        _demandaActual = _demandaActual.copyWith(idIncidente: creado.idIncidente);
         await _guardarBorrador();
         notifyListeners();
+        // Disparamos la sincronización de la demanda para que guarde el idincidente
+        _programarGuardadoRemoto();
       }
     } else {
       await IncidenteService.actualizar(_incidenteActual);
+      if (_demandaActual.idIncidente != _incidenteActual.idIncidente) {
+        _demandaActual = _demandaActual.copyWith(idIncidente: _incidenteActual.idIncidente);
+        _programarGuardadoRemoto();
+      }
     }
+  }
+
+  void cargarDemanda(DemandaRecibida demanda) {
+    _demandaActual = demanda;
+    if (demanda.incidente != null) {
+      _incidenteActual = demanda.incidente!;
+    } else {
+      // Si no tiene incidente, reseteamos a uno vacío pero mantenemos localidad default
+      _incidenteActual = Incidente(idLocalidad: 580056);
+    }
+    _guardarBorrador();
+    notifyListeners();
   }
 }

@@ -21,6 +21,7 @@ class AppSidebar extends StatelessWidget {
     SidebarItem(icon: Icons.add_box_rounded, label: 'Ingreso'),
     SidebarItem(icon: Icons.list_alt_rounded, label: 'Tablero'),
     SidebarItem(icon: Icons.local_shipping_rounded, label: 'Despacho'),
+    SidebarItem(icon: Icons.settings_rounded, label: 'Configuraciones'),
   ];
 
   @override
