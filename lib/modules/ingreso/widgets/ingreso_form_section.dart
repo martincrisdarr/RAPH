@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
+import '../../../shared/services/demanda_recibida_service.dart';
+import '../../../shared/models/demanda_recibida.dart';
 import '../controllers/ingreso_controller.dart';
 
 class IngresoFormSection extends StatefulWidget {
@@ -17,6 +19,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
   final _ingresoController = IngresoController();
   late final TextEditingController _telefonoController;
   late final TextEditingController _nombreController;
+  Future<List<DemandaRecibida>>? _demandasFuture;
 
   @override
   void initState() {
@@ -28,12 +31,18 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
 
   void _onControllerUpdate() {
     if (mounted) {
-      if (_telefonoController.text.isEmpty && _ingresoController.demandaActual.nroLlamadaEntrante != null) {
-        _telefonoController.text = _ingresoController.demandaActual.nroLlamadaEntrante.toString();
+      final demanda = _ingresoController.demandaActual;
+      
+      final nuevoTelefono = demanda.nroLlamadaEntrante?.toString() ?? '';
+      if (_telefonoController.text != nuevoTelefono) {
+        _telefonoController.text = nuevoTelefono;
       }
-      if (_nombreController.text.isEmpty && _ingresoController.demandaActual.apellidoNombre != null && _ingresoController.demandaActual.apellidoNombre!.isNotEmpty) {
-        _nombreController.text = _ingresoController.demandaActual.apellidoNombre!;
+      
+      final nuevoNombre = demanda.apellidoNombre ?? '';
+      if (_nombreController.text != nuevoNombre) {
+        _nombreController.text = nuevoNombre;
       }
+      
       setState(() {});
     }
   }
@@ -49,14 +58,11 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
   static const _tableColumns = ['ID', 'Fecha', 'Tipo', 'Dirección', 'Estado'];
   static const _tableColumnFlex = [1, 2, 2, 4, 2];
 
-  // Mock: últimos incidentes en curso (en producción vendrá de la API)
-  final List<Map<String, String>> _incidentesEnCurso = const [
-    {'id': '#001241', 'fecha': '21/04 14:18', 'tipo': 'Médico', 'direccion': 'Av. Corrientes 1580, CABA', 'estado': 'DESPACHO'},
-    {'id': '#001238', 'fecha': '21/04 13:55', 'tipo': 'Accidente vial', 'direccion': 'Belgrano y Tucumán', 'estado': 'EN SITIO'},
-    {'id': '#001236', 'fecha': '21/04 13:40', 'tipo': 'Incendio', 'direccion': 'Mitre 340, Ramos Mejía', 'estado': 'TRASLADO'},
-    {'id': '#001233', 'fecha': '21/04 13:20', 'tipo': 'Médico', 'direccion': 'San Martín 890, Morón', 'estado': 'DESPACHO'},
-    {'id': '#001229', 'fecha': '21/04 12:58', 'tipo': 'Médico', 'direccion': 'Rivadavia 2200, CABA', 'estado': 'EN SITIO'},
-  ];
+  void _cargarDemandas() {
+    setState(() {
+      _demandasFuture = DemandaRecibidaService.obtenerRecientes();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +122,10 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
             ),
             const SizedBox(width: 16),
             ElevatedButton(
-              onPressed: () => setState(() => _isNuevo = false),
+              onPressed: () {
+                setState(() => _isNuevo = false);
+                _cargarDemandas();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: !_isNuevo ? theme.colorScheme.primary : theme.colorScheme.surface,
                 foregroundColor: !_isNuevo ? Colors.black : Colors.white,
@@ -175,16 +184,32 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
 
           // Rows
           Expanded(
-            child: ListView.separated(
-              itemCount: _incidentesEnCurso.length,
-              separatorBuilder: (_, __) => const Divider(
-                height: 1,
-                color: Colors.white10,
-              ),
-              itemBuilder: (context, index) {
-                final inc = _incidentesEnCurso[index];
-                return _buildIncidenteRow(theme, inc, _tableColumnFlex);
-              },
+            child: FutureBuilder<List<DemandaRecibida>>(
+              future: _demandasFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+                }
+                final demandas = snapshot.data ?? [];
+                if (demandas.isEmpty) {
+                  return const Center(child: Text('No hay incidentes recientes', style: TextStyle(color: Colors.white38)));
+                }
+
+                return ListView.separated(
+                  itemCount: demandas.length,
+                  separatorBuilder: (_, __) => const Divider(
+                    height: 1,
+                    color: Colors.white10,
+                  ),
+                  itemBuilder: (context, index) {
+                    final demanda = demandas[index];
+                    return _buildIncidenteRow(theme, demanda, _tableColumnFlex);
+                  },
+                );
+              }
             ),
           ),
         ],
@@ -194,16 +219,25 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
 
   Widget _buildIncidenteRow(
     ThemeData theme,
-    Map<String, String> inc,
+    DemandaRecibida demanda,
     List<int> flex,
   ) {
-    final estado = inc['estado']!;
+    final estado = demanda.estado?.descripcion ?? 'DESCONOCIDO';
     final estadoColor = _estadoColor(estado);
+    
+    String fechaStr = '--/-- --:--';
+    if (demanda.fechaHora != null) {
+      final f = demanda.fechaHora!;
+      fechaStr = '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')} ${f.hour.toString().padLeft(2, '0')}:${f.minute.toString().padLeft(2, '0')}';
+    }
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => debugPrint('Editar incidente ${inc['id']}'),
+        onTap: () {
+          _ingresoController.cargarDemanda(demanda);
+          setState(() => _isNuevo = true); // Volvemos a la vista del formulario
+        },
         hoverColor: Colors.white.withValues(alpha: 0.04),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -213,7 +247,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
               Expanded(
                 flex: flex[0],
                 child: Text(
-                  inc['id']!,
+                  '#${demanda.idDemandaRecibida ?? '---'}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.bold,
@@ -224,7 +258,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
               Expanded(
                 flex: flex[1],
                 child: Text(
-                  inc['fecha']!,
+                  fechaStr,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.white60,
                   ),
@@ -234,17 +268,18 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
               Expanded(
                 flex: flex[2],
                 child: Text(
-                  inc['tipo']!,
+                  demanda.tipoIngreso?.descripcion ?? 'N/A',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.87),
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               // Dirección
               Expanded(
                 flex: flex[3],
                 child: Text(
-                  inc['direccion']!,
+                  demanda.incidente?.direccion ?? 'No especificada',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.white60,
                   ),
@@ -282,7 +317,11 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
   }
 
   Color _estadoColor(String estado) {
-    switch (estado) {
+    final upperEstado = estado.toUpperCase();
+    switch (upperEstado) {
+      case 'ABIERTA':
+      case 'INGRESO':
+        return const Color(0xFF64B5F6); // blue
       case 'DESPACHO':
         return const Color(0xFFFFB74D); // amber
       case 'EN SITIO':

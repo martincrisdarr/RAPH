@@ -71,4 +71,22 @@ class DemandaRecibidaService {
       return false;
     }
   }
+
+  static Future<List<DemandaRecibida>> obtenerRecientes() async {
+    try {
+      final url = Uri.parse('$_baseUrl?expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades&sort=-fechahora');
+      final response = await http.get(url, headers: _getHeaders());
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((j) => DemandaRecibida.fromJson(j)).toList();
+      } else {
+        print('Error al obtener demandas: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Excepcion en obtenerRecientes: $e');
+      return [];
+    }
+  }
 }

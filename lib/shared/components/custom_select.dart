@@ -42,6 +42,15 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
     _initData();
   }
 
+  @override
+  void didUpdateWidget(covariant CustomSelect<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSelectionId != oldWidget.initialSelectionId || 
+        widget.initialSelection != oldWidget.initialSelection) {
+      _resolveInitialSelection();
+    }
+  }
+
   void _initData() {
     if (widget.items != null) {
       _items = widget.items!;
@@ -97,6 +106,7 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
     }
 
     return DropdownMenu<T>(
+      key: ValueKey(widget.initialSelectionId),
       label: Text(widget.label),
       expandedInsets: EdgeInsets.zero,
       initialSelection: _resolvedInitialSelection,

@@ -32,10 +32,22 @@ class _IncidenteSectionState extends State<IncidenteSection> {
     _ingresoController.addListener(_onControllerUpdate);
   }
 
+  int? _lastIncidenteId;
+
   void _onControllerUpdate() {
     if (mounted) {
-      if (_descripcionIncidenteController.text.isEmpty && _ingresoController.incidenteActual.descripcion != null) {
-        _descripcionIncidenteController.text = _ingresoController.incidenteActual.descripcion!;
+      final incidente = _ingresoController.incidenteActual;
+      
+      // Si el incidente cambió, reseteamos o cargamos descripción
+      if (incidente.idIncidente != _lastIncidenteId) {
+        _lastIncidenteId = incidente.idIncidente;
+        _descripcionIncidenteController.text = incidente.descripcion ?? '';
+      } else {
+        // Sincronización normal si el texto es diferente
+        final nuevaDesc = incidente.descripcion ?? '';
+        if (_descripcionIncidenteController.text != nuevaDesc) {
+          _descripcionIncidenteController.text = nuevaDesc;
+        }
       }
       setState(() {});
     }
