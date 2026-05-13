@@ -6,6 +6,9 @@ import '../../../shared/models/demanda_recibida.dart';
 import '../../../shared/services/demanda_recibida_service.dart';
 import '../../../shared/models/incidente.dart';
 import '../../../shared/services/incidente_service.dart';
+import '../../../shared/models/victima_data.dart';
+import '../../../shared/services/victima_service.dart';
+import '../../../shared/models/victima.dart';
 
 class IngresoController extends ChangeNotifier {
   static final IngresoController _instance = IngresoController._internal();
@@ -24,6 +27,20 @@ class IngresoController extends ChangeNotifier {
   Timer? _debounceIncidenteTimer;
   static const String _draftKey = 'demanda_draft';
   static const String _incidenteDraftKey = 'incidente_draft';
+
+  List<DemandaRecibida> _incidentesRecientes = [];
+  List<DemandaRecibida> get incidentesRecientes => _incidentesRecientes;
+  set incidentesRecientes(List<DemandaRecibida> value) {
+    _incidentesRecientes = value;
+    notifyListeners();
+  }
+
+  bool _vistaFormulario = true;
+  bool get vistaFormulario => _vistaFormulario;
+  set vistaFormulario(bool value) {
+    _vistaFormulario = value;
+    notifyListeners();
+  }
 
   Future<void> _cargarBorrador() async {
     final prefs = await SharedPreferences.getInstance();
@@ -178,13 +195,99 @@ class IngresoController extends ChangeNotifier {
     }
   }
 
+  List<VictimaData> _victimas = [VictimaData()];
+  List<VictimaData> get victimas => _victimas;
+
+  int _selectedVictimaIndex = 0;
+  int get selectedVictimaIndex => _selectedVictimaIndex;
+  set selectedVictimaIndex(int value) {
+    if (value >= 0 && value < _victimas.length) {
+      _selectedVictimaIndex = value;
+      notifyListeners();
+    }
+  }
+
+  void addVictima() {
+    _victimas.add(VictimaData());
+    _selectedVictimaIndex = _victimas.length - 1;
+    notifyListeners();
+  }
+
+  void removeVictima(int index) {
+    if (_victimas.length > 1) {
+      _victimas.removeAt(index);
+      if (_selectedVictimaIndex >= _victimas.length) {
+        _selectedVictimaIndex = _victimas.length - 1;
+      }
+      notifyListeners();
+    }
+  }
+
+  Timer? _uiNameDebounce;
+
+  void updateVictima(int index, {String? nombre, String? edad, int? idConfGenero, String? dni, String? codigoTriage, List<String>? sintomas}) {
+    if (index >= 0 && index < _victimas.length) {
+      final v = _victimas[index];
+      bool shouldNotifyImmediately = true;
+
+      if (nombre != null) {
+        v.nombre = nombre;
+        shouldNotifyImmediately = false;
+        _uiNameDebounce?.cancel();
+        _uiNameDebounce = Timer(const Duration(seconds: 2), () {
+          notifyListeners();
+        });
+      }
+      if (edad != null) v.edad = edad;
+      if (idConfGenero != null) v.idConfGenero = idConfGenero;
+      if (dni != null) v.dni = dni;
+      if (codigoTriage != null) v.codigoTriage = codigoTriage;
+      if (sintomas != null) v.sintomasSeleccionados = sintomas;
+      
+      if (shouldNotifyImmediately) {
+        notifyListeners();
+      }
+      _programarSyncVictima(v);
+    }
+  }
+
+  final Map<String, Timer> _victimaSyncTimers = {};
+
+  void _programarSyncVictima(VictimaData v) {
+    _victimaSyncTimers[v.id]?.cancel();
+    _victimaSyncTimers[v.id] = Timer(const Duration(seconds: 2), () async {
+      await _sincronizarVictima(v);
+    });
+  }
+
+  Future<void> _sincronizarVictima(VictimaData victima) async {
+    final payload = victima.toVictima(_incidenteActual.idIncidente);
+    if (victima.idVictima == null) {
+      if (victima.nombre.isEmpty && victima.dni.isEmpty && victima.idConfGenero == null) return;
+      final creada = await VictimaService.crear(payload);
+      if (creada != null && creada.idVictima != null) {
+        victima.idVictima = creada.idVictima;
+        notifyListeners();
+      }
+    } else {
+      await VictimaService.actualizar(payload);
+    }
+  }
+
   void cargarDemanda(DemandaRecibida demanda) {
     _demandaActual = demanda;
+    _selectedVictimaIndex = 0; 
+    _vistaFormulario = true;
     if (demanda.incidente != null) {
       _incidenteActual = demanda.incidente!;
+      if (demanda.incidente!.victimas != null && demanda.incidente!.victimas!.isNotEmpty) {
+        _victimas = demanda.incidente!.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
+      } else {
+        _victimas = [VictimaData()];
+      }
     } else {
-      // Si no tiene incidente, reseteamos a uno vacío pero mantenemos localidad default
       _incidenteActual = Incidente(idLocalidad: 580056);
+      _victimas = [VictimaData()];
     }
     _guardarBorrador();
     notifyListeners();

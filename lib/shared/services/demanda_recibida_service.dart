@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/demanda_recibida.dart';
+import '../models/incidente.dart';
 import '../../config/auth_controller.dart';
 
 class DemandaRecibidaService {
@@ -72,21 +73,70 @@ class DemandaRecibidaService {
     }
   }
 
-  static Future<List<DemandaRecibida>> obtenerRecientes() async {
+  static Future<List<DemandaRecibida>> obtenerRecientes({DateTime? fecha, String? direccion}) async {
     try {
-      final url = Uri.parse('$_baseUrl?expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades&sort=-fechahora');
+      // Endpoint específico para incidentes recientes
+      final baseIncidenteUrl = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_incidente/recientes';
+      var urlStr = baseIncidenteUrl;
+      
+      bool hasQuery = false;
+      int filterIndex = 0;
+      if (direccion != null && direccion.isNotEmpty) {
+        urlStr += '?filter%5Bdireccion%5D%5Blike%5D=${Uri.encodeComponent(direccion)}';
+        filterIndex++;
+        hasQuery = true;
+      }
+
+      if (fecha != null) {
+        final f = fecha;
+        final fechaStr = '${f.year}-${f.month.toString().padLeft(2, '0')}-${f.day.toString().padLeft(2, '0')}';
+        urlStr += (hasQuery ? '&' : '?') + 'filter%5Band%5D%5B$filterIndex%5D%5Bfechahoraauto%5D%5Blike%5D=${Uri.encodeComponent(fechaStr)}';
+      }
+
+      final url = Uri.parse(urlStr);
       final response = await http.get(url, headers: _getHeaders());
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((j) => DemandaRecibida.fromJson(j)).toList();
-      } else {
-        print('Error al obtener demandas: ${response.statusCode}');
-        return [];
+        return data.map<DemandaRecibida>((j) {
+          // El JSON de este endpoint usa 'idincidente' (sin guión bajo)
+          final idIncidente = j['idincidente'];
+          
+          return DemandaRecibida(
+            idDemandaRecibida: idIncidente,
+            fechaHora: j['fechahoraauto'] != null ? DateTime.tryParse(j['fechahoraauto']) : null,
+            incidente: Incidente(
+              idIncidente: idIncidente,
+              direccion: j['direccion'] ?? 'No especificada',
+              latitud: j['latitud'] != null ? double.tryParse(j['latitud'].toString()) : null,
+              longitud: j['longitud'] != null ? double.tryParse(j['longitud'].toString()) : null,
+              direccionAuto: j['direccion_auto'],
+            ),
+          );
+        }).toList();
       }
-    } catch (e) {
-      print('Excepcion en obtenerRecientes: $e');
       return [];
+    } catch (e) {
+      print('Excepcion en obtenerRecientes (Incidente): $e');
+      return [];
+    }
+  }
+
+  static Future<DemandaRecibida?> obtenerPorIncidente(int idIncidente) async {
+    try {
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
+      final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          return DemandaRecibida.fromJson(data.first);
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error en obtenerPorIncidente: $e');
+      return null;
     }
   }
 }
