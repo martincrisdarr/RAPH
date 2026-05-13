@@ -6,6 +6,7 @@ import '../../../shared/components/autocomplete_select.dart';
 import '../controllers/ingreso_controller.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../shared/services/geocoding_service.dart';
+import '../../../shared/services/demanda_recibida_service.dart';
 
 class UbicacionSection extends StatefulWidget {
   const UbicacionSection({super.key});
@@ -184,15 +185,68 @@ class _UbicacionSectionState extends State<UbicacionSection> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.map_outlined, size: 36, color: Colors.white24),
+            const Icon(Icons.map_outlined, size: 36, color: Colors.white24),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Mapa disponible solo en web y móvil',
               style: TextStyle(color: Colors.white38, fontSize: 13),
             ),
           ],
         ),
       );
+    }
+
+    final Set<Marker> markers = {};
+
+    // 1. Marcador del incidente actual (Rojo)
+    if (_ingresoController.incidenteActual.latitud != null &&
+        _ingresoController.incidenteActual.longitud != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('incidente_location'),
+          position: LatLng(
+            _ingresoController.incidenteActual.latitud!,
+            _ingresoController.incidenteActual.longitud!,
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          zIndex: 2, // Por encima de los otros
+        ),
+      );
+    }
+
+    // 2. Marcadores de incidentes recientes (Azul / Celeste)
+    final incidentes = _ingresoController.incidentesRecientes;
+    if (incidentes != null) {
+      for (var demanda in incidentes) {
+      final inc = demanda.incidente;
+      if (inc != null && inc.latitud != null && inc.longitud != null) {
+        // Evitamos duplicar el marcador si es el mismo id que el actual
+        if (inc.idIncidente != null && inc.idIncidente == _ingresoController.incidenteActual.idIncidente) continue;
+
+        markers.add(
+          Marker(
+            markerId: MarkerId('recent_${inc.idIncidente ?? demanda.idDemandaRecibida}'),
+            position: LatLng(inc.latitud!, inc.longitud!),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+            alpha: 0.7,
+            infoWindow: InfoWindow(
+              title: inc.direccion ?? 'Sin dirección',
+              snippet: demanda.fechaHora != null 
+                  ? 'Fecha: ${demanda.fechaHora!.day}/${demanda.fechaHora!.month} ${demanda.fechaHora!.hour}:${demanda.fechaHora!.minute}' 
+                  : null,
+            ),
+            onTap: () async {
+              if (inc.idIncidente != null) {
+                final fullDemanda = await DemandaRecibidaService.obtenerPorIncidente(inc.idIncidente!);
+                if (fullDemanda != null) {
+                  _ingresoController.cargarDemanda(fullDemanda);
+                }
+              }
+            },
+          ),
+        );
+      }
+      }
     }
 
     return GoogleMap(
@@ -206,19 +260,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
       myLocationButtonEnabled: false,
       mapToolbarEnabled: false,
       zoomControlsEnabled: true,
-      markers: _ingresoController.incidenteActual.latitud != null &&
-              _ingresoController.incidenteActual.longitud != null
-          ? {
-              Marker(
-                markerId: const MarkerId('incidente_location'),
-                position: LatLng(
-                  _ingresoController.incidenteActual.latitud!,
-                  _ingresoController.incidenteActual.longitud!,
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-              ),
-            }
-          : {},
+      markers: markers,
       onMapCreated: (controller) => _mapController = controller,
       onTap: _buscarDireccionPorCoordenadas,
     );

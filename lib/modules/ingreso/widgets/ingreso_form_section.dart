@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
@@ -14,19 +15,21 @@ class IngresoFormSection extends StatefulWidget {
 }
 
 class _IngresoFormSectionState extends State<IngresoFormSection> {
-  bool _isNuevo = true;
   
   final _ingresoController = IngresoController();
-  late final TextEditingController _telefonoController;
-  late final TextEditingController _nombreController;
-  Future<List<DemandaRecibida>>? _demandasFuture;
+  final TextEditingController _telefonoController = TextEditingController();
+  final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _filtroDireccionController = TextEditingController();
+  DateTime? _filtroFecha;
+  List<DemandaRecibida> _demandasRecientes = [];
+  bool _cargandoListado = false;
 
   @override
   void initState() {
     super.initState();
-    _telefonoController = TextEditingController(text: _ingresoController.demandaActual.nroLlamadaEntrante?.toString() ?? '');
-    _nombreController = TextEditingController(text: _ingresoController.demandaActual.apellidoNombre ?? '');
     _ingresoController.addListener(_onControllerUpdate);
+    // Sincronizar estado inicial
+    _onControllerUpdate();
   }
 
   void _onControllerUpdate() {
@@ -52,16 +55,32 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
     _ingresoController.removeListener(_onControllerUpdate);
     _telefonoController.dispose();
     _nombreController.dispose();
+    _filtroDireccionController.dispose();
     super.dispose();
   }
 
   static const _tableColumns = ['ID', 'Fecha', 'Tipo', 'Dirección', 'Estado'];
   static const _tableColumnFlex = [1, 2, 2, 4, 2];
 
-  void _cargarDemandas() {
-    setState(() {
-      _demandasFuture = DemandaRecibidaService.obtenerRecientes();
-    });
+  Timer? _debounceTimer;
+
+  Future<void> _cargarDemandas() async {
+    setState(() => _cargandoListado = true);
+    try {
+      final data = await DemandaRecibidaService.obtenerRecientes(
+        fecha: _filtroFecha,
+        direccion: _filtroDireccionController.text,
+      );
+      if (mounted) {
+        setState(() {
+          _demandasRecientes = data;
+          _cargandoListado = false;
+        });
+        _ingresoController.incidentesRecientes = data;
+      }
+    } catch (e) {
+      if (mounted) setState(() => _cargandoListado = false);
+    }
   }
 
   @override
@@ -70,7 +89,6 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // --- Datos de Llamada (Siempre visibles) ---
         Row(
           children: [
             Expanded(
@@ -105,39 +123,194 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
           keyboardType: TextInputType.name,
           onChanged: (val) => _ingresoController.updateDemanda(apellidoNombre: val),
         ),
-        const SizedBox(height: 16),
         const SizedBox(height: 24),
-
-        // --- Botones toggle ---
         Row(
           children: [
-            ElevatedButton(
-              onPressed: () => setState(() => _isNuevo = true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isNuevo ? theme.colorScheme.primary : theme.colorScheme.surface,
-                foregroundColor: _isNuevo ? Colors.black : Colors.white,
-                side: BorderSide(color: _isNuevo ? Colors.transparent : Colors.white24),
+            Expanded(
+              child: InkWell(
+                onTap: () {
+                  _ingresoController.limpiarBorrador();
+                  _ingresoController.vistaFormulario = true;
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _ingresoController.vistaFormulario ? theme.colorScheme.primary.withValues(alpha: 0.15) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _ingresoController.vistaFormulario ? theme.colorScheme.primary : Colors.white12,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'NUEVO',
+                      style: TextStyle(
+                        color: _ingresoController.vistaFormulario ? theme.colorScheme.primary : Colors.white60,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              child: const Text('NUEVO'),
             ),
-            const SizedBox(width: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() => _isNuevo = false);
-                _cargarDemandas();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: !_isNuevo ? theme.colorScheme.primary : theme.colorScheme.surface,
-                foregroundColor: !_isNuevo ? Colors.black : Colors.white,
-                side: BorderSide(color: !_isNuevo ? Colors.transparent : Colors.white24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: InkWell(
+                onTap: () {
+                  _ingresoController.vistaFormulario = false;
+                  _cargarDemandas();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: !_ingresoController.vistaFormulario ? theme.colorScheme.primary.withValues(alpha: 0.15) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: !_ingresoController.vistaFormulario ? theme.colorScheme.primary : Colors.white12,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'INCIDENTES',
+                      style: TextStyle(
+                        color: !_ingresoController.vistaFormulario ? theme.colorScheme.primary : Colors.white60,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              child: const Text('INCIDENTE EN CURSO'),
             ),
           ],
         ),
-
-        // --- Tabla INCIDENTE EN CURSO ---
-        if (!_isNuevo) ...[
+        const SizedBox(height: 24),
+        if (!_ingresoController.vistaFormulario) ...[
+          Row(
+            children: [
+              FilterChip(
+                label: const Text('Hoy', style: TextStyle(fontSize: 12)),
+                selected: _filtroFecha != null && 
+                          _filtroFecha!.day == DateTime.now().day &&
+                          _filtroFecha!.month == DateTime.now().month,
+                onSelected: (val) {
+                  setState(() {
+                    if (val) {
+                      _filtroFecha = DateTime.now();
+                    } else {
+                      _filtroFecha = null;
+                    }
+                  });
+                  _cargarDemandas();
+                },
+                visualDensity: VisualDensity.compact,
+                showCheckmark: false,
+                selectedColor: theme.colorScheme.primary.withValues(alpha: 0.3),
+                labelStyle: TextStyle(
+                  color: _filtroFecha != null ? theme.colorScheme.primary : Colors.white38,
+                ),
+              ),
+              const SizedBox(width: 8),
+              MenuAnchor(
+                builder: (context, controller, child) {
+                  return IconButton(
+                    icon: Icon(
+                      Icons.calendar_month_outlined, 
+                      size: 20, 
+                      color: _filtroFecha != null && _filtroFecha!.day != DateTime.now().day 
+                          ? theme.colorScheme.primary 
+                          : Colors.white38
+                    ),
+                    onPressed: () {
+                      if (controller.isOpen) {
+                        controller.close();
+                      } else {
+                        controller.open();
+                      }
+                    },
+                  );
+                },
+                style: MenuStyle(
+                  backgroundColor: const MaterialStatePropertyAll(Color(0xFF1A1F24)),
+                  elevation: const MaterialStatePropertyAll(16),
+                  padding: const MaterialStatePropertyAll(EdgeInsets.zero),
+                  shape: MaterialStatePropertyAll(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Colors.white12, width: 1),
+                    ),
+                  ),
+                ),
+                menuChildren: [
+                  Theme(
+                    data: theme.copyWith(
+                      colorScheme: theme.colorScheme.copyWith(
+                        surface: const Color(0xFF1A1F24),
+                        onSurface: Colors.white,
+                      ),
+                      dividerColor: Colors.white10,
+                    ),
+                    child: SizedBox(
+                      width: 300,
+                      height: 350,
+                      child: CalendarDatePicker(
+                        initialDate: _filtroFecha ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                        onDateChanged: (picked) {
+                          setState(() => _filtroFecha = picked);
+                          _cargarDemandas();
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_filtroFecha != null)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 14, color: Colors.white38),
+                  onPressed: () {
+                    setState(() => _filtroFecha = null);
+                    _cargarDemandas();
+                  },
+                  visualDensity: VisualDensity.compact,
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 36,
+                  child: TextField(
+                    controller: _filtroDireccionController,
+                    onChanged: (val) {
+                      _debounceTimer?.cancel();
+                      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+                        _cargarDemandas();
+                      });
+                      setState(() {});
+                    },
+                    style: const TextStyle(fontSize: 13, color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar dirección...',
+                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      prefixIcon: const Icon(Icons.search, size: 16, color: Colors.white38),
+                      suffixIcon: _filtroDireccionController.text.isNotEmpty 
+                          ? IconButton(
+                              icon: const Icon(Icons.close, size: 14),
+                              onPressed: () {
+                                _filtroDireccionController.clear();
+                                _cargarDemandas();
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Expanded(child: _buildIncidentesTable(theme)),
         ],
@@ -184,33 +357,29 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
 
           // Rows
           Expanded(
-            child: FutureBuilder<List<DemandaRecibida>>(
-              future: _demandasFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
-                }
-                final demandas = snapshot.data ?? [];
-                if (demandas.isEmpty) {
-                  return const Center(child: Text('No hay incidentes recientes', style: TextStyle(color: Colors.white38)));
-                }
-
-                return ListView.separated(
-                  itemCount: demandas.length,
-                  separatorBuilder: (_, __) => const Divider(
-                    height: 1,
-                    color: Colors.white10,
-                  ),
-                  itemBuilder: (context, index) {
-                    final demanda = demandas[index];
-                    return _buildIncidenteRow(theme, demanda, _tableColumnFlex);
-                  },
-                );
-              }
-            ),
+            child: _cargandoListado
+                ? const Center(child: CircularProgressIndicator())
+                : _demandasRecientes.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No hay incidentes que coincidan',
+                          style: TextStyle(color: Colors.white38),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: _demandasRecientes.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          height: 1,
+                          color: Colors.white10,
+                        ),
+                        itemBuilder: (context, index) {
+                          return _buildIncidenteRow(
+                            theme,
+                            _demandasRecientes[index],
+                            _tableColumnFlex,
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -234,9 +403,20 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          _ingresoController.cargarDemanda(demanda);
-          setState(() => _isNuevo = true); // Volvemos a la vista del formulario
+        onTap: () async {
+          if (demanda.idDemandaRecibida != null) {
+            // Mostramos un loading simple o feedback visual
+            final fullDemanda = await DemandaRecibidaService.obtenerPorIncidente(demanda.idDemandaRecibida!);
+            if (fullDemanda != null) {
+              _ingresoController.cargarDemanda(fullDemanda);
+            } else {
+              // Si falla, al menos cargamos la básica que tenemos
+              _ingresoController.cargarDemanda(demanda);
+            }
+          } else {
+            _ingresoController.cargarDemanda(demanda);
+          }
+          _ingresoController.vistaFormulario = true;
         },
         hoverColor: Colors.white.withValues(alpha: 0.04),
         child: Padding(

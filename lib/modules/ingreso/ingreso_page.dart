@@ -66,13 +66,13 @@ class _IngresoPageState extends State<IngresoPage> {
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
-                        height: 400,
+                        height: 500,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const Expanded(
                               flex: 2,
-                              child: IngresoSectionCard(title: 'INCIDENTE', child: IncidenteSection()),
+                              child: IngresoSectionCard(title: '', child: IncidenteSection()),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
@@ -94,8 +94,8 @@ class _IngresoPageState extends State<IngresoPage> {
                       ),
                       const SizedBox(height: 16),
                       const SizedBox(
-                        height: 600,
-                        child: IngresoSectionCard(title: 'VÍCTIMAS', child: VictimasSection()),
+                        height: 500,
+                        child: IngresoSectionCard(title: 'SÍNTOMAS Y ASISTENCIA', child: VictimasSection()),
                       ),
                     ],
                   ),
