@@ -84,6 +84,62 @@ class _VictimasSectionState extends State<VictimasSection> {
           ),
           const SizedBox(height: 16),
           _buildAdjuntosSection(theme, index, victima),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  allowMultiple: true,
+                  type: FileType.custom,
+                  allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
+                );
+
+                if (result != null) {
+                  setState(() {
+                    victima.archivosAdjuntos.addAll(result.files);
+                  });
+                }
+              },
+              icon: const Icon(Icons.attach_file, size: 20),
+              label: const Text(
+                'Adjuntar documentación',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                foregroundColor: theme.colorScheme.primary,
+                side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+          ),
+          if (victima.archivosAdjuntos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: victima.archivosAdjuntos.map((file) {
+                return Chip(
+                  label: Text(
+                    file.name,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () {
+                    setState(() {
+                      victima.archivosAdjuntos.remove(file);
+                    });
+                  },
+                  backgroundColor: theme.colorScheme.surface,
+                  side: const BorderSide(color: Colors.white24),
+                );
+              }).toList().cast<Widget>(),
+            ),
+          ],
         ],
       ),
     );
