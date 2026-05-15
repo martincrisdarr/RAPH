@@ -311,10 +311,10 @@ class _VictimasSectionState extends State<VictimasSection> {
       children: [
         OutlinedButton.icon(
           onPressed: () async {
-            FilePickerResult? result = await FilePicker.pickFiles(allowMultiple: true);
-            if (result != null) {
-              setState(() => victima.archivosAdjuntos.addAll(result.files));
-            }
+            // FilePickerResult? result = await FilePicker.pickFiles(allowMultiple: true);
+            // if (result != null) {
+            //   setState(() => victima.archivosAdjuntos.addAll(result.files));
+            // }
           },
           icon: const Icon(Icons.attach_file, size: 20),
           label: const Text('Adjuntar documentación'),
