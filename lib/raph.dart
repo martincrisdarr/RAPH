@@ -15,6 +15,7 @@ import 'shared/components/layout/app_scaffold.dart';
 import 'shared/components/layout/app_sidebar.dart'; // AppMenuItem
 
 // EXPORTS (API pública del package)
+export 'raph_app.dart';
 export 'modules/auth/models/sesion.dart';
 export 'modules/auth/controllers/auth_controller.dart';
 export 'modules/auth/views/sesion_detalle_widget.dart';
