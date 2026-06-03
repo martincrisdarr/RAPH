@@ -98,7 +98,7 @@ class _KanbanCardState extends State<KanbanCard> {
                       ],
                     ),
                   ),
-                  if (widget.globalStatus != 'Despacho')
+                  if (widget.globalStatus != 'Llamada recibida')
                     Text(
                       widget.time,
                       style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
@@ -118,7 +118,7 @@ class _KanbanCardState extends State<KanbanCard> {
                 widget.subtitle,
                 style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
               ),
-              if (widget.globalStatus != 'Despacho') ...[
+              if (widget.globalStatus != 'Llamada recibida') ...[
                 const SizedBox(height: 16),
                 const Divider(height: 1, color: Colors.white10),
                 const SizedBox(height: 12),

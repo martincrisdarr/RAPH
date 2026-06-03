@@ -83,11 +83,11 @@ class _ListadosPageState extends State<ListadosPage> {
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
       moviles: [
-        MovilStatus(nombre: 'Móvil 1', status: 'Despacho'),
-        MovilStatus(nombre: 'Móvil 3', status: 'Despacho'),
-        MovilStatus(nombre: 'Móvil 10', status: 'Despacho'),
+        MovilStatus(nombre: 'Móvil 1', status: 'Llamada recibida'),
+        MovilStatus(nombre: 'Móvil 3', status: 'Llamada recibida'),
+        MovilStatus(nombre: 'Móvil 10', status: 'Llamada recibida'),
       ],
-      status: 'Despacho',
+      status: 'Llamada recibida',
     ),
     KanbanItem(
       id: '2',
@@ -96,8 +96,8 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 12m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      moviles: [MovilStatus(nombre: 'Móvil 3', status: 'Despacho')],
-      status: 'Despacho',
+      moviles: [MovilStatus(nombre: 'Móvil 3', status: 'Llamada recibida')],
+      status: 'Llamada recibida',
     ),
     KanbanItem(
       id: '3',
@@ -106,8 +106,8 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 20m',
       priority: 'AMARILLO',
       priorityColor: Colors.orangeAccent,
-      moviles: [MovilStatus(nombre: 'Móvil 2', status: 'Despacho')],
-      status: 'Despacho',
+      moviles: [MovilStatus(nombre: 'Móvil 2', status: 'Llamada recibida')],
+      status: 'Llamada recibida',
     ),
     KanbanItem(
       id: '4',
@@ -181,9 +181,9 @@ class _ListadosPageState extends State<ListadosPage> {
         final item = _items[itemIndex];
         item.status = newStatus;
         
-        if (newStatus == 'Despacho') {
+        if (newStatus == 'Llamada recibida') {
           for (var m in item.moviles) {
-            m.status = 'Despacho';
+            m.status = 'Llamada recibida';
           }
         } else if (newStatus == 'Finalizado') {
           for (var m in item.moviles) {
@@ -191,7 +191,7 @@ class _ListadosPageState extends State<ListadosPage> {
           }
         } else if (newStatus == 'En curso') {
           for (var m in item.moviles) {
-            if (m.status == 'Despacho' || m.status == 'Finalizado') {
+            if (m.status == 'Llamada recibida' || m.status == 'Finalizado') {
               m.status = 'Despachado';
             }
           }
@@ -297,9 +297,9 @@ class _ListadosPageState extends State<ListadosPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildColumn(
-                        title: 'Despacho',
-                        statuses: const ['Despacho'],
-                        dropStatus: 'Despacho',
+                        title: 'Llamada recibida',
+                        statuses: const ['Llamada recibida'],
+                        dropStatus: 'Llamada recibida',
                         flex: 1,
                       ),
                       _buildColumn(
