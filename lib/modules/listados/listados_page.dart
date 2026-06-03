@@ -11,7 +11,7 @@ class KanbanItem {
   final String time;
   final String priority;
   final Color priorityColor;
-  final String movil;
+  final List<MovilStatus> moviles;
   String status;
 
   KanbanItem({
@@ -21,7 +21,7 @@ class KanbanItem {
     required this.time,
     required this.priority,
     required this.priorityColor,
-    required this.movil,
+    required this.moviles,
     required this.status,
   });
 }
@@ -82,8 +82,12 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 5m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      movil: 'Móvil 1',
-      status: 'En curso',
+      moviles: [
+        MovilStatus(nombre: 'Móvil 1', status: 'Despacho'),
+        MovilStatus(nombre: 'Móvil 3', status: 'Despacho'),
+        MovilStatus(nombre: 'Móvil 10', status: 'Despacho'),
+      ],
+      status: 'Despacho',
     ),
     KanbanItem(
       id: '2',
@@ -92,8 +96,8 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 12m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      movil: 'Móvil 3',
-      status: 'En curso',
+      moviles: [MovilStatus(nombre: 'Móvil 3', status: 'Despacho')],
+      status: 'Despacho',
     ),
     KanbanItem(
       id: '3',
@@ -102,8 +106,8 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 20m',
       priority: 'AMARILLO',
       priorityColor: Colors.orangeAccent,
-      movil: 'Móvil 2',
-      status: 'En curso',
+      moviles: [MovilStatus(nombre: 'Móvil 2', status: 'Despacho')],
+      status: 'Despacho',
     ),
     KanbanItem(
       id: '4',
@@ -112,8 +116,13 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 15m',
       priority: 'VERDE',
       priorityColor: Colors.greenAccent,
-      movil: 'Móvil 5',
-      status: 'Despachado',
+      moviles: [
+        MovilStatus(nombre: 'Móvil 5', status: 'Despachado'),
+        MovilStatus(nombre: 'Móvil 2', status: 'En sitio'),
+        MovilStatus(nombre: 'Móvil 1', status: 'Traslado'),
+        MovilStatus(nombre: 'Móvil 7', status: 'Arribado'),
+      ],
+      status: 'En curso',
     ),
     KanbanItem(
       id: '5',
@@ -122,8 +131,8 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 8m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      movil: 'Móvil 1',
-      status: 'En sitio',
+      moviles: [MovilStatus(nombre: 'Móvil 1', status: 'En sitio')],
+      status: 'En curso',
     ),
     KanbanItem(
       id: '6',
@@ -132,8 +141,13 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 45m',
       priority: 'AMARILLO',
       priorityColor: Colors.orangeAccent,
-      movil: 'Móvil 4',
-      status: 'Traslado',
+      moviles: [
+        MovilStatus(nombre: 'Móvil 4', status: 'Traslado'),
+        MovilStatus(nombre: 'Móvil 6', status: 'Despachado'),
+        MovilStatus(nombre: 'Móvil 3', status: 'En sitio'),
+        MovilStatus(nombre: 'Móvil 8', status: 'Arribado'),
+      ],
+      status: 'En curso',
     ),
     KanbanItem(
       id: '7',
@@ -142,8 +156,8 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 30m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      movil: 'Móvil 2',
-      status: 'Arribado',
+      moviles: [MovilStatus(nombre: 'Móvil 2', status: 'Arribado')],
+      status: 'En curso',
     ),
     KanbanItem(
       id: '8',
@@ -152,7 +166,10 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 1h',
       priority: 'VERDE',
       priorityColor: Colors.greenAccent,
-      movil: 'Móvil 6',
+      moviles: [
+        MovilStatus(nombre: 'Móvil 6', status: 'Finalizado'),
+        MovilStatus(nombre: 'Móvil 9', status: 'Finalizado'),
+      ],
       status: 'Finalizado',
     ),
   ];
@@ -161,7 +178,24 @@ class _ListadosPageState extends State<ListadosPage> {
     setState(() {
       final itemIndex = _items.indexWhere((item) => item.title == itemTitle);
       if (itemIndex != -1) {
-        _items[itemIndex].status = newStatus;
+        final item = _items[itemIndex];
+        item.status = newStatus;
+        
+        if (newStatus == 'Despacho') {
+          for (var m in item.moviles) {
+            m.status = 'Despacho';
+          }
+        } else if (newStatus == 'Finalizado') {
+          for (var m in item.moviles) {
+            m.status = 'Finalizado';
+          }
+        } else if (newStatus == 'En curso') {
+          for (var m in item.moviles) {
+            if (m.status == 'Despacho' || m.status == 'Finalizado') {
+              m.status = 'Despachado';
+            }
+          }
+        }
       }
     });
   }
@@ -262,12 +296,24 @@ class _ListadosPageState extends State<ListadosPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildColumn('En curso'),
-                      _buildColumn('Despachado'),
-                      _buildColumn('En sitio'),
-                      _buildColumn('Traslado'),
-                      _buildColumn('Arribado'),
-                      _buildColumn('Finalizado'),
+                      _buildColumn(
+                        title: 'Despacho',
+                        statuses: const ['Despacho'],
+                        dropStatus: 'Despacho',
+                        flex: 1,
+                      ),
+                      _buildColumn(
+                        title: 'En curso',
+                        statuses: const ['En curso', 'Despachado', 'En sitio', 'Traslado', 'Arribado'],
+                        dropStatus: 'En curso',
+                        flex: 2,
+                      ),
+                      _buildColumn(
+                        title: 'Finalizado',
+                        statuses: const ['Finalizado'],
+                        dropStatus: 'Finalizado',
+                        flex: 1,
+                      ),
                     ],
                   ),
                 ),
@@ -299,19 +345,28 @@ class _ListadosPageState extends State<ListadosPage> {
     );
   }
 
-  Widget _buildColumn(String status) {
-    final columnItems = _items.where((item) => item.status == status).toList();
+  Widget _buildColumn({
+    required String title,
+    required List<String> statuses,
+    required String dropStatus,
+    int flex = 1,
+  }) {
+    final columnItems = _items.where((item) => statuses.contains(item.status)).toList();
+    final isEnCurso = title == 'En curso';
     
     return Expanded(
+      flex: flex,
       child: KanbanColumn(
-        title: status,
+        title: title,
         count: columnItems.length,
-        onAccept: (itemTitle) => _onItemDropped(itemTitle, status),
+        isGrid: isEnCurso,
+        onAccept: (itemTitle) => _onItemDropped(itemTitle, dropStatus),
         children: columnItems.map((item) => KanbanCard(
           title: item.title,
           subtitle: item.subtitle,
           time: item.time,
-          movil: item.movil,
+          moviles: item.moviles,
+          globalStatus: item.status,
           priority: item.priority,
           priorityColor: item.priorityColor,
           onCursorChange: _updateGlobalCursor,

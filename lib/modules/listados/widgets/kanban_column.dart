@@ -5,6 +5,7 @@ class KanbanColumn extends StatelessWidget {
   final List<Widget> children;
   final int count;
   final Function(String) onAccept;
+  final bool isGrid;
 
   const KanbanColumn({
     super.key,
@@ -12,6 +13,7 @@ class KanbanColumn extends StatelessWidget {
     required this.children,
     required this.onAccept,
     this.count = 0,
+    this.isGrid = false,
   });
 
   @override
@@ -73,10 +75,44 @@ class KanbanColumn extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: children,
-                ),
+                child: isGrid
+                    ? Builder(
+                        builder: (context) {
+                          final List<Widget> leftChildren = [];
+                          final List<Widget> rightChildren = [];
+                          for (int i = 0; i < children.length; i++) {
+                            if (i % 2 == 0) {
+                              leftChildren.add(children[i]);
+                            } else {
+                              rightChildren.add(children[i]);
+                            }
+                          }
+
+                          return SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    children: leftChildren,
+                                  ),
+                                ),
+                                const SizedBox(width: 24.0),
+                                Expanded(
+                                  child: Column(
+                                    children: rightChildren,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        children: children,
+                      ),
               ),
             ],
           ),
