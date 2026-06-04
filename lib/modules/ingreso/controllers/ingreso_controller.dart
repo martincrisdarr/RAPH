@@ -77,6 +77,7 @@ class IngresoController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_draftKey);
     await prefs.remove(_incidenteDraftKey);
+    await prefs.remove('novedades_draft');
     _demandaActual = DemandaRecibida(idCfgEstado: 5);
     _incidenteActual = Incidente(idLocalidad: 580056);
     notifyListeners();

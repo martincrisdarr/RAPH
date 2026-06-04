@@ -45,6 +45,7 @@ class _NovedadesSectionState extends State<NovedadesSection> {
     
     // Si el ID del incidente cambió
     if (incidente.idIncidente != _lastIncidenteId) {
+      final bool isFirstRun = _lastIncidenteId == null;
       _lastIncidenteId = incidente.idIncidente;
       
       if (incidente.novedades != null && incidente.novedades!.isNotEmpty) {
@@ -56,10 +57,14 @@ class _NovedadesSectionState extends State<NovedadesSection> {
         _scrollToBottom();
       } else {
         // Reset si el nuevo incidente no tiene novedades
-        setState(() {
-          _novedades.clear();
-          _pendingIndexes.clear();
-        });
+        // Solo limpiamos si NO es la primera corrida (inicialización de la página)
+        // para evitar pisar las novedades que cargamos desde el LocalStorage (_cargarLocal).
+        if (!isFirstRun) {
+          setState(() {
+            _novedades.clear();
+            _pendingIndexes.clear();
+          });
+        }
       }
     }
   }

@@ -32,7 +32,7 @@ class AuthController {
     if (username == 'dev12345' && password == 'dev12345') {
       final mockJsonResponse = {
         'success': true,
-        'token': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...',
+        'token': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6ImRldjEyMzQ1In0.eyJzdWIiOiJkZXYxMjM0NSIsImlzcyI6IiIsImF1ZCI6IiIsImlhdCI6MTc4MDQ4ODAwNSwiZXhwIjoxNzgwNjYwODA1LCJqdGkiOiIxN2M2YzYyYTk2MWJlOTciLCJ1c2VyIjoiZGV2MTIzNDUiLCJub21icmUiOiJVc3VhcmlvIn0.zWIY68l8-lSD8xBsQqwphYESm-QhDqV7P1an9f_lpzI',
         'usuario': {
           'user': 'dev12345',
           'nombre': 'Desarrollador',
