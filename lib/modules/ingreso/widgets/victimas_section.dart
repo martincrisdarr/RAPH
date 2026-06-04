@@ -83,7 +83,6 @@ class _VictimasSectionState extends State<VictimasSection> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildAdjuntosSection(theme, index, victima),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
@@ -361,34 +360,4 @@ class _VictimasSectionState extends State<VictimasSection> {
     );
   }
 
-  Widget _buildAdjuntosSection(ThemeData theme, int index, VictimaData victima) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        OutlinedButton.icon(
-          onPressed: () async {
-            // FilePickerResult? result = await FilePicker.pickFiles(allowMultiple: true);
-            // if (result != null) {
-            //   setState(() => victima.archivosAdjuntos.addAll(result.files));
-            // }
-          },
-          icon: const Icon(Icons.attach_file, size: 20),
-          label: const Text('Adjuntar documentación'),
-        ),
-        if (victima.archivosAdjuntos.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: victima.archivosAdjuntos.map((file) {
-              return Chip(
-                label: Text(file.name, style: const TextStyle(fontSize: 12)),
-                onDeleted: () => setState(() => victima.archivosAdjuntos.remove(file)),
-              );
-            }).toList(),
-          ),
-        ],
-      ],
-    );
-  }
 }
