@@ -34,36 +34,40 @@ class _NovedadesSectionState extends State<NovedadesSection> {
   @override
   void initState() {
     super.initState();
+    _lastIncidenteId = _ingresoController.incidenteActual.idIncidente;
     _cargarLocal();
     _ingresoController.addListener(_onControllerUpdate);
   }
 
   int? _lastIncidenteId;
 
-  void _onControllerUpdate() {
+  void _onControllerUpdate() async {
     final incidente = _ingresoController.incidenteActual;
     
     // Si el ID del incidente cambió
     if (incidente.idIncidente != _lastIncidenteId) {
-      final bool isFirstRun = _lastIncidenteId == null;
-      _lastIncidenteId = incidente.idIncidente;
+      final currentId = incidente.idIncidente;
+      _lastIncidenteId = currentId;
       
-      if (incidente.novedades != null && incidente.novedades!.isNotEmpty) {
-        setState(() {
-          _novedades.clear();
-          _novedades.addAll(incidente.novedades!);
-          _pendingIndexes.clear();
-        });
-        _scrollToBottom();
+      if (currentId != null) {
+        final fetchedNovedades = await NovedadService.obtenerPorIncidente(currentId);
+        
+        if (_lastIncidenteId == currentId && mounted) {
+          setState(() {
+            _novedades.clear();
+            _novedades.addAll(fetchedNovedades);
+            _pendingIndexes.clear();
+          });
+          _guardarLocal();
+          _scrollToBottom();
+        }
       } else {
-        // Reset si el nuevo incidente no tiene novedades
-        // Solo limpiamos si NO es la primera corrida (inicialización de la página)
-        // para evitar pisar las novedades que cargamos desde el LocalStorage (_cargarLocal).
-        if (!isFirstRun) {
+        if (mounted) {
           setState(() {
             _novedades.clear();
             _pendingIndexes.clear();
           });
+          _guardarLocal();
         }
       }
     }

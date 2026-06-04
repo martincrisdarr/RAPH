@@ -47,4 +47,23 @@ class NovedadService {
       return null;
     }
   }
+
+  /// Obtiene el listado de novedades de un incidente desde el backend.
+  static Future<List<Novedad>> obtenerPorIncidente(int idIncidente) async {
+    try {
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente';
+      final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((n) => Novedad.fromJson(n)).toList();
+      } else {
+        print('Error al obtener novedades: ${response.statusCode} - ${response.body}');
+        return [];
+      }
+    } catch (e) {
+      print('Excepcion en obtenerPorIncidente: $e');
+      return [];
+    }
+  }
 }

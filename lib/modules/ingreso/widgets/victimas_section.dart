@@ -1,16 +1,6 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../../shared/components/custom_select.dart';
-import '../../../shared/models/configuracion.dart';
-import '../../../shared/models/victima.dart';
-import '../../../shared/services/configuracion_service.dart';
-import '../../../shared/services/victima_service.dart';
 import '../controllers/ingreso_controller.dart';
-
 import '../../../shared/models/victima_data.dart';
 
 class VictimasSection extends StatefulWidget {
@@ -20,8 +10,10 @@ class VictimasSection extends StatefulWidget {
   State<VictimasSection> createState() => _VictimasSectionState();
 }
 
-class _VictimasSectionState extends State<VictimasSection> {
+class _VictimasSectionState extends State<VictimasSection> with TickerProviderStateMixin {
   final _ingresoController = IngresoController();
+  late TabController _victimasTabController;
+  int _lastVictimasCount = 0;
 
   final List<String> _etiquetasSintomas = [
     'Dolor de pecho',
@@ -35,16 +27,51 @@ class _VictimasSectionState extends State<VictimasSection> {
   @override
   void initState() {
     super.initState();
+    _lastVictimasCount = _ingresoController.victimas.length;
+    _victimasTabController = TabController(
+      length: _lastVictimasCount, 
+      vsync: this,
+      initialIndex: _ingresoController.selectedVictimaIndex.clamp(0, _lastVictimasCount - 1),
+    );
+    
+    _victimasTabController.addListener(() {
+      if (!_victimasTabController.indexIsChanging) {
+        _ingresoController.selectedVictimaIndex = _victimasTabController.index;
+      }
+    });
+
     _ingresoController.addListener(_onControllerUpdate);
   }
 
   void _onControllerUpdate() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      if (_ingresoController.victimas.length != _lastVictimasCount) {
+        _lastVictimasCount = _ingresoController.victimas.length;
+        _victimasTabController.dispose();
+        _victimasTabController = TabController(
+          length: _lastVictimasCount, 
+          vsync: this,
+          initialIndex: _ingresoController.selectedVictimaIndex.clamp(0, _lastVictimasCount - 1),
+        );
+        _victimasTabController.addListener(() {
+          if (!_victimasTabController.indexIsChanging) {
+            _ingresoController.selectedVictimaIndex = _victimasTabController.index;
+          }
+        });
+      }
+
+      if (_victimasTabController.index != _ingresoController.selectedVictimaIndex) {
+        _victimasTabController.animateTo(_ingresoController.selectedVictimaIndex);
+      }
+      
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
     _ingresoController.removeListener(_onControllerUpdate);
+    _victimasTabController.dispose();
     super.dispose();
   }
 
@@ -62,6 +89,28 @@ class _VictimasSectionState extends State<VictimasSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          TabBar(
+            controller: _victimasTabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            indicatorColor: theme.colorScheme.primary,
+            labelColor: theme.colorScheme.primary,
+            unselectedLabelColor: Colors.white60,
+            dividerColor: Colors.transparent,
+            tabs: victimas.asMap().entries.map((e) {
+              final victima = e.value;
+              final nombre = victima.nombre.trim();
+              String tabLabel = 'Víctima ${e.key + 1}';
+              
+              if (nombre.isNotEmpty) {
+                tabLabel = nombre.split(' ').first;
+                if (tabLabel.length > 10) tabLabel = '${tabLabel.substring(0, 8)}..';
+              }
+
+              return Tab(text: tabLabel);
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
           _buildTriageBanner(theme, index, victima),
           const SizedBox(height: 16),
           Expanded(
