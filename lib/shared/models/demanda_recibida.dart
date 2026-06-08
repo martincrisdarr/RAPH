@@ -77,13 +77,14 @@ class DemandaRecibida {
     Configuracion? estado,
     Configuracion? tipoIngreso,
     Incidente? incidente,
+    bool clearNroLlamada = false,
   }) {
     return DemandaRecibida(
       idDemandaRecibida: idDemandaRecibida ?? this.idDemandaRecibida,
       fechaHora: fechaHora ?? this.fechaHora,
       usuario: usuario ?? this.usuario,
       idCfgTipoIngreso: idCfgTipoIngreso ?? this.idCfgTipoIngreso,
-      nroLlamadaEntrante: nroLlamadaEntrante ?? this.nroLlamadaEntrante,
+      nroLlamadaEntrante: clearNroLlamada ? null : (nroLlamadaEntrante ?? this.nroLlamadaEntrante),
       apellidoNombre: apellidoNombre ?? this.apellidoNombre,
       dni: dni ?? this.dni,
       idCfgEstado: idCfgEstado ?? this.idCfgEstado,

@@ -42,6 +42,13 @@ class IngresoController extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<DemandaRecibida> _llamadasDelIncidente = [];
+  List<DemandaRecibida> get llamadasDelIncidente => _llamadasDelIncidente;
+  set llamadasDelIncidente(List<DemandaRecibida> value) {
+    _llamadasDelIncidente = value;
+    notifyListeners();
+  }
+
   Future<void> _cargarBorrador() async {
     final prefs = await SharedPreferences.getInstance();
     final draftJson = prefs.getString(_draftKey);
@@ -83,12 +90,41 @@ class IngresoController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> prepararNuevoIncidente() async {
+    // Preservar datos de la llamada/demanda
+    final tipoIngreso = _demandaActual.idCfgTipoIngreso;
+    final nroLlamada = _demandaActual.nroLlamadaEntrante;
+    final nombre = _demandaActual.apellidoNombre;
+    final dni = _demandaActual.dni;
+
+    // Resetear demanda a borrador limpio pero con los datos de la llamada
+    _demandaActual = DemandaRecibida(
+      idCfgEstado: 5,
+      idCfgTipoIngreso: tipoIngreso,
+      nroLlamadaEntrante: nroLlamada,
+      apellidoNombre: nombre,
+      dni: dni,
+      fechaHora: DateTime.now(),
+    );
+
+    // Resetear incidente a uno nuevo
+    _incidenteActual = Incidente(idLocalidad: 580056);
+    
+    // Resetear víctimas a una vacía
+    _victimas = [VictimaData()];
+    _selectedVictimaIndex = 0;
+
+    await _guardarBorrador();
+    notifyListeners();
+  }
+
   void updateDemanda({
     int? idCfgTipoIngreso,
     int? nroLlamadaEntrante,
     String? apellidoNombre,
     String? dni,
     int? idCfgEstado,
+    bool clearNroLlamada = false,
   }) {
     _demandaActual = _demandaActual.copyWith(
       idCfgTipoIngreso: idCfgTipoIngreso,
@@ -96,6 +132,7 @@ class IngresoController extends ChangeNotifier {
       apellidoNombre: apellidoNombre,
       dni: dni,
       idCfgEstado: idCfgEstado,
+      clearNroLlamada: clearNroLlamada,
       // Actualizamos la fecha a ahora
       fechaHora: DateTime.now(),
     );
@@ -290,6 +327,34 @@ class IngresoController extends ChangeNotifier {
       _incidenteActual = Incidente(idLocalidad: 580056);
       _victimas = [VictimaData()];
     }
+    _llamadasDelIncidente = [demanda];
+    _guardarBorrador();
+    notifyListeners();
+  }
+
+  void cargarIncidenteYListarLlamadas(DemandaRecibida demandaConIncidente, List<DemandaRecibida> llamadas) {
+    // Vincular la llamada actual al incidente seleccionado sin sobrescribir los datos de ingreso
+    _demandaActual = _demandaActual.copyWith(
+      idIncidente: demandaConIncidente.incidente?.idIncidente ?? demandaConIncidente.idIncidente,
+      incidente: demandaConIncidente.incidente,
+      idDemandaRecibida: null, // Se trata de una nueva llamada para este incidente
+    );
+    
+    _llamadasDelIncidente = llamadas;
+    _selectedVictimaIndex = 0;
+
+    if (demandaConIncidente.incidente != null) {
+      _incidenteActual = demandaConIncidente.incidente!;
+      if (demandaConIncidente.incidente!.victimas != null && demandaConIncidente.incidente!.victimas!.isNotEmpty) {
+        _victimas = demandaConIncidente.incidente!.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
+      } else {
+        _victimas = [VictimaData()];
+      }
+    } else {
+      _incidenteActual = Incidente(idLocalidad: 580056);
+      _victimas = [VictimaData()];
+    }
+    
     _guardarBorrador();
     notifyListeners();
   }
