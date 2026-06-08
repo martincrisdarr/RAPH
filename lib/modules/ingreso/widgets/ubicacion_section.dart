@@ -7,6 +7,7 @@ import '../controllers/ingreso_controller.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../shared/services/geocoding_service.dart';
 import '../../../shared/services/demanda_recibida_service.dart';
+import '../../../shared/models/demanda_recibida.dart';
 
 class UbicacionSection extends StatefulWidget {
   const UbicacionSection({super.key});
@@ -237,9 +238,15 @@ class _UbicacionSectionState extends State<UbicacionSection> {
             ),
             onTap: () async {
               if (inc.idIncidente != null) {
-                final fullDemanda = await DemandaRecibidaService.obtenerPorIncidente(inc.idIncidente!);
-                if (fullDemanda != null) {
-                  _ingresoController.cargarDemanda(fullDemanda);
+                final allCalls = await DemandaRecibidaService.obtenerTodasPorIncidente(inc.idIncidente!);
+                if (allCalls.isNotEmpty) {
+                  _ingresoController.cargarIncidenteYListarLlamadas(allCalls.first, allCalls);
+                } else {
+                  final fallbackDemanda = DemandaRecibida(
+                    idIncidente: inc.idIncidente,
+                    incidente: inc,
+                  );
+                  _ingresoController.cargarIncidenteYListarLlamadas(fallbackDemanda, []);
                 }
               }
             },
@@ -266,13 +273,219 @@ class _UbicacionSectionState extends State<UbicacionSection> {
     );
   }
 
+  Future<void> _mostrarMapaGrandeDialog() async {
+    final theme = Theme.of(context);
+
+    // Si hay texto escrito, buscamos en el mapa primero para centrar
+    if (_domicilioController.text.trim().isNotEmpty) {
+      await _buscarDireccionEnMapa();
+    }
+
+    if (!mounted) return;
+
+    final double lat = _ingresoController.incidenteActual.latitud ?? -38.9516;
+    final double lng = _ingresoController.incidenteActual.longitud ?? -68.0591;
+    final LatLng initialLatLng = LatLng(lat, lng);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final mediaQuery = MediaQuery.of(context);
+        final height = mediaQuery.size.height * 0.85;
+        final width = mediaQuery.size.width * 0.9;
+
+        return Dialog(
+          backgroundColor: theme.colorScheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.all(24),
+          child: Container(
+            width: width,
+            height: height,
+            constraints: const BoxConstraints(
+              maxWidth: 1000,
+              maxHeight: 800,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.map_outlined, color: theme.colorScheme.primary, size: 28),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Ubicación en el Mapa',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white10, height: 1),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    child: Stack(
+                      children: [
+                        ListenableBuilder(
+                          listenable: _ingresoController,
+                          builder: (context, _) {
+                            return _buildLargeMapWidget(initialLatLng);
+                          },
+                        ),
+                        Positioned(
+                          top: 16,
+                          left: 16,
+                          right: 16,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white24, width: 1),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  )
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.touch_app_outlined, color: Colors.blueAccent, size: 20),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Hacé click o tocá en el mapa para ajustar la ubicación exacta en tiempo real.',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeMapWidget(LatLng initialPos) {
+    final bool mapsSupported = kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+
+    if (!mapsSupported) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.map_outlined, size: 48, color: Colors.white24),
+            const SizedBox(height: 12),
+            const Text(
+              'Mapa disponible solo en web y móvil',
+              style: TextStyle(color: Colors.white38, fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final Set<Marker> markers = {};
+
+    if (_ingresoController.incidenteActual.latitud != null &&
+        _ingresoController.incidenteActual.longitud != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('incidente_location_large'),
+          position: LatLng(
+            _ingresoController.incidenteActual.latitud!,
+            _ingresoController.incidenteActual.longitud!,
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          zIndex: 2,
+        ),
+      );
+    }
+
+    final incidentes = _ingresoController.incidentesRecientes;
+    if (incidentes != null) {
+      for (var demanda in incidentes) {
+        final inc = demanda.incidente;
+        if (inc != null && inc.latitud != null && inc.longitud != null) {
+          if (inc.idIncidente != null && inc.idIncidente == _ingresoController.incidenteActual.idIncidente) continue;
+
+          markers.add(
+            Marker(
+              markerId: MarkerId('recent_large_${inc.idIncidente ?? demanda.idDemandaRecibida}'),
+              position: LatLng(inc.latitud!, inc.longitud!),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+              alpha: 0.7,
+              infoWindow: InfoWindow(
+                title: inc.direccion ?? 'Sin dirección',
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+        target: initialPos,
+        zoom: 16,
+      ),
+      myLocationButtonEnabled: false,
+      mapToolbarEnabled: false,
+      zoomControlsEnabled: true,
+      markers: markers,
+      onTap: (coords) async {
+        await _buscarDireccionPorCoordenadas(coords);
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return FocusTraversalGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -370,12 +583,23 @@ class _UbicacionSectionState extends State<UbicacionSection> {
             SizedBox(
               height: 46,
               child: OutlinedButton.icon(
-                onPressed: _buscarDireccionEnMapa,
-                icon: const Icon(Icons.map_outlined),
-                label: const Text('Ver en el mapa'),
+                onPressed: _isLoadingMap ? null : _mostrarMapaGrandeDialog,
+                icon: _isLoadingMap
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.0,
+                          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                        ),
+                      )
+                    : const Icon(Icons.map_outlined),
+                label: Text(_isLoadingMap ? 'Buscando...' : 'Ver en el mapa'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  side: BorderSide(color: theme.colorScheme.primary),
+                  side: BorderSide(
+                    color: _isLoadingMap ? theme.colorScheme.primary.withValues(alpha: 0.3) : theme.colorScheme.primary,
+                  ),
                   foregroundColor: theme.colorScheme.primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -399,17 +623,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
             ),
           ),
         ),
-        if (_isLoadingMap)
-          const Padding(
-            padding: EdgeInsets.only(top: 8.0),
-            child: Center(
-              child: SizedBox(
-                width: 24, height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          ),
       ],
-    );
+    ));
   }
 }

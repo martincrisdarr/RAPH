@@ -65,6 +65,17 @@ ThemeData buildAppTheme() {
   return base.copyWith(
     scaffoldBackgroundColor: AppColors.background,
     textTheme: textTheme,
+    inputDecorationTheme: InputDecorationTheme(
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      labelStyle: const TextStyle(color: Colors.white54, fontSize: 14),
+      floatingLabelStyle: TextStyle(color: colorScheme.primary, fontSize: 14),
+      enabledBorder: const UnderlineInputBorder(
+        borderSide: BorderSide(color: Colors.white24, width: 1.0),
+      ),
+      focusedBorder: UnderlineInputBorder(
+        borderSide: BorderSide(color: colorScheme.primary, width: 2.0),
+      ),
+    ),
     cardTheme: CardThemeData(
       color: AppColors.surface.withOpacity(0.9),
       surfaceTintColor: Colors.transparent,

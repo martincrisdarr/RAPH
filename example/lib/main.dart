@@ -24,7 +24,7 @@ void main() async {
     apellido: '',
     email: 'dev12345@example.com',
   );
-  final fakeToken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1kYXJyb3V4In0.eyJzdWIiOiJtZGFycm91eCIsImlzcyI6IiIsImF1ZCI6IiIsImlhdCI6MTc4MDU5NTQxMSwiZXhwIjoxNzgwNzY4MjExLCJqdGkiOiJmOWQ5MjUwYWIwNTY4ZGEiLCJ1c2VyIjoibWRhcnJvdXgiLCJub21icmUiOiJNYXJ0XHUwMGVkbiJ9.t3JybVoZzTaRH99vZA7X_fUKLpX6lXWgt9rHuswEVXQ';
+  final fakeToken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1kYXJyb3V4In0.eyJzdWIiOiJtZGFycm91eCIsImlzcyI6IiIsImF1ZCI6IiIsImlhdCI6MTc4MDkyMDIzNywiZXhwIjoxNzgxMDkzMDM3LCJqdGkiOiIzZTRiMzY0MzUwMjdlNWQiLCJ1c2VyIjoibWRhcnJvdXgiLCJub21icmUiOiJNYXJ0XHUwMGVkbiJ9.ssfCR89DCV9--VHFPUlcnwlad7EMyfQr6d9K0OvobK4';
   
   final mockSession = AutoLoginSession(simulatedUser, fakeToken);
 

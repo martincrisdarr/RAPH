@@ -139,4 +139,20 @@ class DemandaRecibidaService {
       return null;
     }
   }
+
+  static Future<List<DemandaRecibida>> obtenerTodasPorIncidente(int idIncidente) async {
+    try {
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
+      final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map<DemandaRecibida>((j) => DemandaRecibida.fromJson(j)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error en obtenerTodasPorIncidente: $e');
+      return [];
+    }
+  }
 }

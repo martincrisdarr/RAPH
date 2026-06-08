@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
@@ -24,6 +25,8 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
   List<DemandaRecibida> _demandasRecientes = [];
   bool _cargandoListado = false;
 
+  String? _errorTelefono;
+
   @override
   void initState() {
     super.initState();
@@ -38,7 +41,9 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
       
       final nuevoTelefono = demanda.nroLlamadaEntrante?.toString() ?? '';
       if (_telefonoController.text != nuevoTelefono) {
-        _telefonoController.text = nuevoTelefono;
+        if (_errorTelefono == null) {
+          _telefonoController.text = nuevoTelefono;
+        }
       }
       
       final nuevoNombre = demanda.apellidoNombre ?? '';
@@ -86,8 +91,9 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return FocusTraversalGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
@@ -109,9 +115,31 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
             Expanded(
               child: TextFormField(
                 controller: _telefonoController,
-                decoration: const InputDecoration(labelText: 'Teléfono'),
+                decoration: InputDecoration(
+                  labelText: 'Teléfono',
+                  errorText: _errorTelefono,
+                ),
                 keyboardType: TextInputType.phone,
-                onChanged: (val) => _ingresoController.updateDemanda(nroLlamadaEntrante: int.tryParse(val)),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                onChanged: (val) {
+                  final parsedVal = int.tryParse(val);
+                  if (parsedVal != null && parsedVal > 2147483647) {
+                    setState(() {
+                      _errorTelefono = 'Máx: 2147483647';
+                    });
+                  } else {
+                    setState(() {
+                      _errorTelefono = null;
+                    });
+                    _ingresoController.updateDemanda(
+                      nroLlamadaEntrante: parsedVal,
+                      clearNroLlamada: val.isEmpty,
+                    );
+                  }
+                },
               ),
             ),
           ],
@@ -129,7 +157,6 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
             Expanded(
               child: InkWell(
                 onTap: () {
-                  _ingresoController.limpiarBorrador();
                   _ingresoController.vistaFormulario = true;
                 },
                 child: Container(
@@ -186,6 +213,126 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
           ],
         ),
         const SizedBox(height: 24),
+        if (_ingresoController.vistaFormulario) ...[
+          if (_ingresoController.incidenteActual.idIncidente != null) ...[
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.link_rounded,
+                        color: theme.colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Vinculado a Incidente #${_ingresoController.incidenteActual.idIncidente}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Dirección: ${_ingresoController.incidenteActual.direccion ?? "No especificada"}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (_ingresoController.llamadasDelIncidente.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Llamadas registradas: ${_ingresoController.llamadasDelIncidente.length}',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await _ingresoController.prepararNuevoIncidente();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Se desvinculó del incidente y se inició uno nuevo.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.link_off_rounded, size: 16),
+                    label: const Text(
+                      'DESVINCULAR / CREAR NUEVO',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent, width: 1),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white10,
+                  width: 1,
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Nuevo incidente (Aún no guardado en mapa/vinculado)',
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
         if (!_ingresoController.vistaFormulario) ...[
           Row(
             children: [
@@ -315,7 +462,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
           Expanded(child: _buildIncidentesTable(theme)),
         ],
       ],
-    );
+    ));
   }
 
   Widget _buildIncidentesTable(ThemeData theme) {
@@ -400,23 +547,23 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
       fechaStr = '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')} ${f.hour.toString().padLeft(2, '0')}:${f.minute.toString().padLeft(2, '0')}';
     }
 
+    final isSelected = demanda.idDemandaRecibida != null && 
+                       demanda.idDemandaRecibida == _ingresoController.incidenteActual.idIncidente;
+
     return Material(
-      color: Colors.transparent,
+      color: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.08) : Colors.transparent,
       child: InkWell(
         onTap: () async {
           if (demanda.idDemandaRecibida != null) {
-            // Mostramos un loading simple o feedback visual
-            final fullDemanda = await DemandaRecibidaService.obtenerPorIncidente(demanda.idDemandaRecibida!);
-            if (fullDemanda != null) {
-              _ingresoController.cargarDemanda(fullDemanda);
+            final allCalls = await DemandaRecibidaService.obtenerTodasPorIncidente(demanda.idDemandaRecibida!);
+            if (allCalls.isNotEmpty) {
+              _ingresoController.cargarIncidenteYListarLlamadas(allCalls.first, allCalls);
             } else {
-              // Si falla, al menos cargamos la básica que tenemos
-              _ingresoController.cargarDemanda(demanda);
+              _ingresoController.cargarIncidenteYListarLlamadas(demanda, []);
             }
           } else {
-            _ingresoController.cargarDemanda(demanda);
+            _ingresoController.cargarIncidenteYListarLlamadas(demanda, []);
           }
-          _ingresoController.vistaFormulario = true;
         },
         hoverColor: Colors.white.withValues(alpha: 0.04),
         child: Padding(

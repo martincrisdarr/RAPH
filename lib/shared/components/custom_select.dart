@@ -111,7 +111,7 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
       expandedInsets: EdgeInsets.zero,
       initialSelection: _resolvedInitialSelection,
       inputDecorationTheme: theme.inputDecorationTheme.copyWith(
-        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       ),
       menuStyle: MenuStyle(
         backgroundColor: MaterialStatePropertyAll(theme.scaffoldBackgroundColor),
