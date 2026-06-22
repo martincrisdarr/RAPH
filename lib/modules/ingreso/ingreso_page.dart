@@ -106,11 +106,18 @@ class _IngresoPageState extends State<IngresoPage> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            const Expanded(
+                            Expanded(
                               flex: 1,
                               child: IngresoSectionCard(
-                                title: 'RESUMEN DE VÍCTIMAS',
-                                child: ResumenVictimasSection(),
+                                title: 'NOVEDADES',
+                                child: NovedadesSection(
+                                  usuarioActual: () {
+                                    final u = RaphAuthController.instance.currentUser;
+                                    if (u == null) return 'Sistema';
+                                    final nombre = '${u.nombre ?? ''} ${u.apellido ?? ''}'.trim();
+                                    return nombre.isNotEmpty ? nombre : (u.email ?? 'Sistema');
+                                  }(),
+                                ),
                               ),
                             ),
                           ],
@@ -132,18 +139,11 @@ class _IngresoPageState extends State<IngresoPage> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            Expanded(
+                            const Expanded(
                               flex: 1,
                               child: IngresoSectionCard(
-                                title: 'NOVEDADES',
-                                child: NovedadesSection(
-                                  usuarioActual: () {
-                                    final u = RaphAuthController.instance.currentUser;
-                                    if (u == null) return 'Sistema';
-                                    final nombre = '${u.nombre ?? ''} ${u.apellido ?? ''}'.trim();
-                                    return nombre.isNotEmpty ? nombre : (u.email ?? 'Sistema');
-                                  }(),
-                                ),
+                                title: 'RESUMEN DE VÍCTIMAS',
+                                child: ResumenVictimasSection(),
                               ),
                             ),
                           ],

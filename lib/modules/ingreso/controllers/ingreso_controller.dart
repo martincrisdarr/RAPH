@@ -87,6 +87,9 @@ class IngresoController extends ChangeNotifier {
     await prefs.remove('novedades_draft');
     _demandaActual = DemandaRecibida(idCfgEstado: 5);
     _incidenteActual = Incidente(idLocalidad: 580056);
+    _victimas = [VictimaData()];
+    _selectedVictimaIndex = 0;
+    _llamadasDelIncidente = [];
     notifyListeners();
   }
 
@@ -113,6 +116,7 @@ class IngresoController extends ChangeNotifier {
     // Resetear víctimas a una vacía
     _victimas = [VictimaData()];
     _selectedVictimaIndex = 0;
+    _llamadasDelIncidente = [];
 
     await _guardarBorrador();
     notifyListeners();
