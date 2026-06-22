@@ -125,17 +125,16 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
                   LengthLimitingTextInputFormatter(10),
                 ],
                 onChanged: (val) {
-                  final parsedVal = int.tryParse(val);
-                  if (parsedVal != null && parsedVal > 2147483647) {
+                  if (val.isNotEmpty && val.length < 6) {
                     setState(() {
-                      _errorTelefono = 'Máx: 2147483647';
+                      _errorTelefono = 'Mínimo 6 números';
                     });
                   } else {
                     setState(() {
                       _errorTelefono = null;
                     });
                     _ingresoController.updateDemanda(
-                      nroLlamadaEntrante: parsedVal,
+                      nroLlamadaEntrante: int.tryParse(val),
                       clearNroLlamada: val.isEmpty,
                     );
                   }
