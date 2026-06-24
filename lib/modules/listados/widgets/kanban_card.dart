@@ -1,10 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 class MovilStatus {
   final String nombre;
   String status;
+  DateTime lastStatusChange;
 
-  MovilStatus({required this.nombre, required this.status});
+  MovilStatus({
+    required this.nombre,
+    required this.status,
+    DateTime? lastStatusChange,
+  }) : lastStatusChange = lastStatusChange ?? DateTime.now();
 }
 
 class KanbanCard extends StatefulWidget {
@@ -15,7 +21,6 @@ class KanbanCard extends StatefulWidget {
   final Color priorityColor;
   final List<MovilStatus> moviles;
   final String globalStatus;
-  final Function(MouseCursor) onCursorChange;
 
   const KanbanCard({
     super.key,
@@ -24,7 +29,6 @@ class KanbanCard extends StatefulWidget {
     required this.time,
     required this.moviles,
     required this.globalStatus,
-    required this.onCursorChange,
     this.priority = 'Media',
     this.priorityColor = Colors.orange,
   });
@@ -34,8 +38,35 @@ class KanbanCard extends StatefulWidget {
 }
 
 class _KanbanCardState extends State<KanbanCard> {
-  bool _isDragging = false;
-  bool _isPressed = false;
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    // Update every 10 seconds to keep durations updated
+    _ticker = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  String _getElapsedTime(DateTime lastChange) {
+    final difference = DateTime.now().difference(lastChange);
+    final minutes = difference.inMinutes;
+    if (minutes <= 0) {
+      final seconds = difference.inSeconds;
+      if (seconds < 0) return '0 seg';
+      return '$seconds seg';
+    }
+    return '$minutes min';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,39 +160,47 @@ class _KanbanCardState extends State<KanbanCard> {
                         padding: const EdgeInsets.symmetric(vertical: 4.0),
                         child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.local_shipping, size: 14, color: theme.colorScheme.primary),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    widget.moviles[index].nombre,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.primary,
-                                      fontWeight: FontWeight.bold,
+                            SizedBox(
+                              width: 75.0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.local_shipping, size: 14, color: theme.colorScheme.primary),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        widget.moviles[index].nombre,
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: theme.colorScheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 56),
                             if (widget.globalStatus == 'En curso') ...[
                               _buildTimelineForMovil(theme, widget.moviles[index], cardWidth),
                             ],
-                            if (index == 0) ...[
+                            const Spacer(),
+                            if (widget.globalStatus == 'En curso') ...[
+                              _buildTimeElapsedBadge(theme, widget.moviles[index]),
                               const SizedBox(width: 8),
+                            ],
+                            if (widget.globalStatus == 'Llamada recibida' && index == 0) ...[
                               const Icon(Icons.more_horiz, size: 18, color: Colors.white30),
-                            ] else ...[
-                              if (widget.globalStatus == 'En curso')
-                                const SizedBox(width: 26)
-                              else
-                                const SizedBox.shrink(),
+                              const SizedBox(width: 8),
                             ],
                           ],
                         ),
@@ -176,67 +215,9 @@ class _KanbanCardState extends State<KanbanCard> {
       },
     );
 
-    return Listener(
-      onPointerDown: (_) {
-        setState(() => _isPressed = true);
-        widget.onCursorChange(SystemMouseCursors.grabbing);
-      },
-      onPointerUp: (_) {
-        setState(() => _isPressed = false);
-        if (!_isDragging) {
-          widget.onCursorChange(SystemMouseCursors.basic);
-        }
-      },
-      child: Draggable<String>(
-        data: widget.title,
-        onDragStarted: () {
-          setState(() => _isDragging = true);
-          widget.onCursorChange(SystemMouseCursors.grabbing);
-        },
-        onDragEnd: (_) {
-          setState(() {
-            _isDragging = false;
-            _isPressed = false;
-          });
-          widget.onCursorChange(SystemMouseCursors.basic);
-        },
-        onDraggableCanceled: (_, __) {
-          setState(() {
-            _isDragging = false;
-            _isPressed = false;
-          });
-          widget.onCursorChange(SystemMouseCursors.basic);
-        },
-        feedback: Material(
-          color: Colors.transparent,
-          child: Opacity(
-            opacity: 0.8,
-            child: SizedBox(
-              width: 280,
-              child: cardContent,
-            ),
-          ),
-        ),
-        childWhenDragging: Opacity(
-          opacity: 0.3,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: cardContent,
-          ),
-        ),
-        child: MouseRegion(
-          onEnter: (_) => widget.onCursorChange(SystemMouseCursors.grab),
-          onExit: (_) {
-            if (!_isPressed && !_isDragging) {
-              widget.onCursorChange(SystemMouseCursors.basic);
-            }
-          },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: cardContent,
-          ),
-        ),
-      ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: cardContent,
     );
   }
 
@@ -245,14 +226,14 @@ class _KanbanCardState extends State<KanbanCard> {
     final activeIndex = steps.indexOf(movil.status);
     final isFinalizado = movil.status == 'Finalizado' || widget.globalStatus == 'Finalizado';
 
-    final double actualCardWidth = cardWidth.isInfinite ? 300.0 : cardWidth;
-    final double timelineWidth = (actualCardWidth - 145.0).clamp(100.0, 220.0);
+    const double timelineWidth = 120.0;
     final double stepSpacing = (timelineWidth - 50.0) / 3;
 
     return SizedBox(
       width: timelineWidth,
       height: 20,
       child: Stack(
+        clipBehavior: Clip.none,
         alignment: Alignment.centerLeft,
         children: [
           // 1. Línea de fondo (gris)
@@ -288,7 +269,7 @@ class _KanbanCardState extends State<KanbanCard> {
               ),
             ),
 
-          // 3. Círculos de los pasos
+          // 3. Círculos de los pasos (Interactivos)
           for (int i = 0; i < 4; i++) ...[
             () {
               final isStepActive = i == activeIndex;
@@ -297,25 +278,38 @@ class _KanbanCardState extends State<KanbanCard> {
               final double leftOffset = i * stepSpacing + (isStepActive ? 0.0 : 2.0);
 
               return Positioned(
-                left: leftOffset,
-                top: 10.0 - (size / 2),
-                width: size,
-                height: size,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: (isStepActive || isStepCompleted)
-                        ? theme.colorScheme.primary
-                        : Colors.white24,
-                    shape: BoxShape.circle,
-                    boxShadow: isStepActive
-                        ? [
-                            BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.6),
-                              blurRadius: 4,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : null,
+                left: leftOffset - (12.0 - (size / 2)),
+                top: 10.0 - 12.0,
+                width: 24.0,
+                height: 24.0,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      movil.status = steps[i];
+                      movil.lastStatusChange = DateTime.now();
+                    });
+                  },
+                  child: Center(
+                    child: Container(
+                      width: size,
+                      height: size,
+                      decoration: BoxDecoration(
+                        color: (isStepActive || isStepCompleted)
+                            ? theme.colorScheme.primary
+                            : Colors.white24,
+                        shape: BoxShape.circle,
+                        boxShadow: isStepActive
+                            ? [
+                                BoxShadow(
+                                  color: theme.colorScheme.primary.withOpacity(0.6),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -337,6 +331,23 @@ class _KanbanCardState extends State<KanbanCard> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTimeElapsedBadge(ThemeData theme, MovilStatus movil) {
+    const steps = ['Despachado', 'En sitio', 'Traslado', 'Arribado'];
+    final activeIndex = steps.indexOf(movil.status);
+    if (activeIndex == -1) {
+      return const SizedBox.shrink();
+    }
+
+    return Text(
+      _getElapsedTime(movil.lastStatusChange),
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: Colors.white38,
+        fontWeight: FontWeight.bold,
+        fontSize: 10,
       ),
     );
   }

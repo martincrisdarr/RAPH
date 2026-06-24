@@ -117,10 +117,26 @@ class _ListadosPageState extends State<ListadosPage> {
       priority: 'VERDE',
       priorityColor: Colors.greenAccent,
       moviles: [
-        MovilStatus(nombre: 'Móvil 5', status: 'Despachado'),
-        MovilStatus(nombre: 'Móvil 2', status: 'En sitio'),
-        MovilStatus(nombre: 'Móvil 1', status: 'Traslado'),
-        MovilStatus(nombre: 'Móvil 7', status: 'Arribado'),
+        MovilStatus(
+          nombre: 'Móvil 5',
+          status: 'Despachado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 5)),
+        ),
+        MovilStatus(
+          nombre: 'Móvil 2',
+          status: 'En sitio',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 12)),
+        ),
+        MovilStatus(
+          nombre: 'Móvil 1',
+          status: 'Traslado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 25)),
+        ),
+        MovilStatus(
+          nombre: 'Móvil 7',
+          status: 'Arribado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 3)),
+        ),
       ],
       status: 'En curso',
     ),
@@ -131,7 +147,13 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 8m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      moviles: [MovilStatus(nombre: 'Móvil 1', status: 'En sitio')],
+      moviles: [
+        MovilStatus(
+          nombre: 'Móvil 1',
+          status: 'En sitio',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 18)),
+        )
+      ],
       status: 'En curso',
     ),
     KanbanItem(
@@ -142,10 +164,26 @@ class _ListadosPageState extends State<ListadosPage> {
       priority: 'AMARILLO',
       priorityColor: Colors.orangeAccent,
       moviles: [
-        MovilStatus(nombre: 'Móvil 4', status: 'Traslado'),
-        MovilStatus(nombre: 'Móvil 6', status: 'Despachado'),
-        MovilStatus(nombre: 'Móvil 3', status: 'En sitio'),
-        MovilStatus(nombre: 'Móvil 8', status: 'Arribado'),
+        MovilStatus(
+          nombre: 'Móvil 4',
+          status: 'Traslado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 32)),
+        ),
+        MovilStatus(
+          nombre: 'Móvil 6',
+          status: 'Despachado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 8)),
+        ),
+        MovilStatus(
+          nombre: 'Móvil 3',
+          status: 'En sitio',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 15)),
+        ),
+        MovilStatus(
+          nombre: 'Móvil 8',
+          status: 'Arribado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 4)),
+        ),
       ],
       status: 'En curso',
     ),
@@ -156,7 +194,13 @@ class _ListadosPageState extends State<ListadosPage> {
       time: 'Hace 30m',
       priority: 'ROJO',
       priorityColor: Colors.redAccent,
-      moviles: [MovilStatus(nombre: 'Móvil 2', status: 'Arribado')],
+      moviles: [
+        MovilStatus(
+          nombre: 'Móvil 2',
+          status: 'Arribado',
+          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 21)),
+        )
+      ],
       status: 'En curso',
     ),
     KanbanItem(
@@ -369,7 +413,6 @@ class _ListadosPageState extends State<ListadosPage> {
           globalStatus: item.status,
           priority: item.priority,
           priorityColor: item.priorityColor,
-          onCursorChange: _updateGlobalCursor,
         )).toList(),
       ),
     );
