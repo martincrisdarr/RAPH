@@ -23,6 +23,9 @@ class IngresoController extends ChangeNotifier {
   Incidente _incidenteActual = Incidente(idLocalidad: 580056);
   Incidente get incidenteActual => _incidenteActual;
 
+  bool _tieneBorrador = false;
+  bool get tieneBorrador => _tieneBorrador;
+
   Timer? _debounceTimer;
   Timer? _debounceIncidenteTimer;
   static const String _draftKey = 'demanda_draft';
@@ -52,6 +55,10 @@ class IngresoController extends ChangeNotifier {
   Future<void> _cargarBorrador() async {
     final prefs = await SharedPreferences.getInstance();
     final draftJson = prefs.getString(_draftKey);
+    final incDraftJson = prefs.getString(_incidenteDraftKey);
+    
+    _tieneBorrador = (draftJson != null || incDraftJson != null);
+
     if (draftJson != null) {
       try {
         final decoded = jsonDecode(draftJson);
@@ -61,7 +68,6 @@ class IngresoController extends ChangeNotifier {
       }
     }
 
-    final incDraftJson = prefs.getString(_incidenteDraftKey);
     if (incDraftJson != null) {
       try {
         final decoded = jsonDecode(incDraftJson);
@@ -78,6 +84,10 @@ class IngresoController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_draftKey, jsonEncode(_demandaActual.toJson()));
     await prefs.setString(_incidenteDraftKey, jsonEncode(_incidenteActual.toJson()));
+    if (!_tieneBorrador) {
+      _tieneBorrador = true;
+      notifyListeners();
+    }
   }
 
   Future<void> limpiarBorrador() async {
@@ -90,6 +100,7 @@ class IngresoController extends ChangeNotifier {
     _victimas = [VictimaData()];
     _selectedVictimaIndex = 0;
     _llamadasDelIncidente = [];
+    _tieneBorrador = false;
     notifyListeners();
   }
 
@@ -267,7 +278,15 @@ class IngresoController extends ChangeNotifier {
 
   Timer? _uiNameDebounce;
 
-  void updateVictima(int index, {String? nombre, String? edad, int? idConfGenero, String? dni, String? codigoTriage, List<String>? sintomas}) {
+  void updateVictima(int index, {
+    String? nombre,
+    String? edad,
+    int? idConfGenero,
+    String? dni,
+    String? codigoTriage,
+    List<String>? sintomas,
+    String? descripcion,
+  }) {
     if (index >= 0 && index < _victimas.length) {
       final v = _victimas[index];
       bool shouldNotifyImmediately = true;
@@ -285,6 +304,7 @@ class IngresoController extends ChangeNotifier {
       if (dni != null) v.dni = dni;
       if (codigoTriage != null) v.codigoTriage = codigoTriage;
       if (sintomas != null) v.sintomasSeleccionados = sintomas;
+      if (descripcion != null) v.descripcion = descripcion;
       
       if (shouldNotifyImmediately) {
         notifyListeners();

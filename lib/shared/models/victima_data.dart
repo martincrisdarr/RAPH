@@ -13,6 +13,8 @@ class VictimaData {
   List<String> sintomasSeleccionados = [];
   String busqueda = '';
   List<PlatformFile> archivosAdjuntos = [];
+  String descripcion = '';
+  String? idMovilAsignado;
 
   Victima toVictima(int? idIncidente) {
     return Victima(
@@ -25,6 +27,8 @@ class VictimaData {
           ? sintomasSeleccionados.join(', ')
           : null,
       idIncidente: idIncidente,
+      descripcion: descripcion.isNotEmpty ? descripcion : null,
+      idMovilAsignado: idMovilAsignado,
     );
   }
 
@@ -37,6 +41,8 @@ class VictimaData {
         'dni': dni,
         'codigoTriage': codigoTriage,
         'sintomasSeleccionados': sintomasSeleccionados,
+        'descripcion': descripcion,
+        'idMovilAsignado': idMovilAsignado,
       };
 
   static VictimaData fromStorageJson(Map<String, dynamic> json) {
@@ -49,6 +55,8 @@ class VictimaData {
     v.dni = json['dni'] ?? '';
     v.codigoTriage = json['codigoTriage'];
     v.sintomasSeleccionados = List<String>.from(json['sintomasSeleccionados'] ?? []);
+    v.descripcion = json['descripcion'] ?? '';
+    v.idMovilAsignado = json['idMovilAsignado'];
     return v;
   }
 
@@ -59,6 +67,8 @@ class VictimaData {
     v.edad = victima.edad?.toString() ?? '';
     v.idConfGenero = victima.idConfGenero;
     v.dni = victima.dni?.toString() ?? '';
+    v.descripcion = victima.descripcion ?? '';
+    v.idMovilAsignado = victima.idMovilAsignado;
     if (victima.estadoActual != null && victima.estadoActual!.isNotEmpty) {
       v.sintomasSeleccionados = victima.estadoActual!.split(',').map((s) => s.trim()).toList();
     }

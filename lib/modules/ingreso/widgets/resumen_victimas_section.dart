@@ -154,6 +154,17 @@ class _ResumenVictimasSectionState extends State<ResumenVictimasSection> {
                   color: Colors.white60,
                 ),
               ),
+              if (victima.descripcion.trim().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  victima.descripcion,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
               if (victima.sintomasSeleccionados.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(

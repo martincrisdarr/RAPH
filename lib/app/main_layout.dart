@@ -13,11 +13,11 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 1;
 
   List<Widget> get _pages => [
     const IngresoPage(),
-    const ListadosPage(),
+    ListadosPage(onNewIncidentTap: () => _onMenuSelected(0)),
     const DespachoPage(),
     const ConfiguracionesPage(),
   ];

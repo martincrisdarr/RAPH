@@ -27,7 +27,8 @@ class KanbanItem {
 }
 
 class ListadosPage extends StatefulWidget {
-  const ListadosPage({super.key});
+  final VoidCallback? onNewIncidentTap;
+  const ListadosPage({super.key, this.onNewIncidentTap});
 
   @override
   State<ListadosPage> createState() => _ListadosPageState();
@@ -280,14 +281,30 @@ class _ListadosPageState extends State<ListadosPage> {
                         ),
                       ],
                     ),
-                    OutlinedButton.icon(
-                      onPressed: () => setState(() => _isFilterVisible = !_isFilterVisible),
-                      icon: Icon(_isFilterVisible ? Icons.filter_list_off : Icons.filter_list),
-                      label: Text(_isFilterVisible ? 'Ocultar Filtros' : 'Mostrar Filtros'),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
-                        foregroundColor: theme.colorScheme.primary,
-                      ),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: widget.onNewIncidentTap,
+                          icon: const Icon(Icons.add_box_rounded),
+                          label: const Text('NUEVO INCIDENTE'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _isFilterVisible = !_isFilterVisible),
+                          icon: Icon(_isFilterVisible ? Icons.filter_list_off : Icons.filter_list),
+                          label: Text(_isFilterVisible ? 'Ocultar Filtros' : 'Mostrar Filtros'),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+                            foregroundColor: theme.colorScheme.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

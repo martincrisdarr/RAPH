@@ -7,7 +7,6 @@ import 'widgets/ubicacion_section.dart';
 import 'widgets/incidente_section.dart';
 import 'widgets/novedades_section.dart';
 import 'widgets/protocolos_panel.dart';
-import 'widgets/victimas_section.dart';
 import 'widgets/datos_victimas_section.dart';
 import 'widgets/resumen_victimas_section.dart';
 import 'widgets/llamadas_asociadas_section.dart';
@@ -125,7 +124,7 @@ class _IngresoPageState extends State<IngresoPage> {
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
-                        height: 500,
+                        height: 780,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -148,11 +147,6 @@ class _IngresoPageState extends State<IngresoPage> {
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      const SizedBox(
-                        height: 500,
-                        child: IngresoSectionCard(title: 'SÍNTOMAS Y ASISTENCIA', child: VictimasSection()),
                       ),
                       ListenableBuilder(
                         listenable: IngresoController(),

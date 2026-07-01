@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../modules/ingreso/controllers/ingreso_controller.dart';
 
 class SidebarItem {
   final IconData icon;
@@ -18,7 +19,6 @@ class AppSidebar extends StatelessWidget {
   });
 
   final List<SidebarItem> _items = [
-    SidebarItem(icon: Icons.add_box_rounded, label: 'Ingreso'),
     SidebarItem(icon: Icons.list_alt_rounded, label: 'Tablero'),
     SidebarItem(icon: Icons.local_shipping_rounded, label: 'Despacho'),
     SidebarItem(icon: Icons.settings_rounded, label: 'Configuraciones'),
@@ -50,46 +50,116 @@ class AppSidebar extends StatelessWidget {
           Expanded(
             child: SingleChildScrollView(
               physics: const NeverScrollableScrollPhysics(),
-              child: Column(
-                children: List.generate(_items.length, (index) {
-                  final item = _items[index];
-                  final isSelected = selectedIndex == index;
+              child: ListenableBuilder(
+                listenable: IngresoController(),
+                builder: (context, child) {
+                  final tieneBorrador = IngresoController().tieneBorrador;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                    child: HoverRightTooltip(
-                      message: item.label,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => onItemSelected(index),
-                        hoverColor: theme.colorScheme.primary.withOpacity(0.05),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.all(14.0),
-                          decoration: BoxDecoration(
-                            color: isSelected 
-                              ? theme.colorScheme.primary.withOpacity(0.15) 
-                              : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected 
-                                ? theme.colorScheme.primary.withOpacity(0.5) 
-                                : Colors.transparent,
-                              width: 1,
+                  return Column(
+                    children: List.generate(_items.length, (index) {
+                      final item = _items[index];
+                      // Index 0 in sidebar corresponds to Page Index 1 (Tablero)
+                      // Index 1 corresponds to Page Index 2 (Despacho)
+                      // Index 2 corresponds to Page Index 3 (Configuraciones)
+                      final isSelected = selectedIndex == (index + 1);
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                            child: HoverRightTooltip(
+                              message: item.label,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () => onItemSelected(index + 1),
+                                hoverColor: theme.colorScheme.primary.withOpacity(0.05),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.all(14.0),
+                                  decoration: BoxDecoration(
+                                    color: isSelected 
+                                      ? theme.colorScheme.primary.withOpacity(0.15) 
+                                      : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isSelected 
+                                        ? theme.colorScheme.primary.withOpacity(0.5) 
+                                        : Colors.transparent,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    item.icon,
+                                    color: isSelected 
+                                      ? theme.colorScheme.primary 
+                                      : theme.colorScheme.onSurface.withOpacity(0.7),
+                                    size: 26,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          child: Icon(
-                            item.icon,
-                            color: isSelected 
-                              ? theme.colorScheme.primary 
-                              : theme.colorScheme.onSurface.withOpacity(0.7),
-                            size: 26,
-                          ),
-                        ),
-                      ),
-                    ),
+                          // Si es el ítem "Tablero" (índice 0) y hay un borrador activo
+                          if (index == 0 && tieneBorrador) ...[
+                            // Línea de conexión sutil
+                            Container(
+                              width: 2,
+                              height: 10,
+                              margin: const EdgeInsets.symmetric(vertical: 2),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    theme.colorScheme.primary.withOpacity(0.3),
+                                    Colors.amber.withOpacity(0.3),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                            // Botón de Borrador Activo (Submenú)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                              child: HoverRightTooltip(
+                                message: 'Continuar Borrador',
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: () => onItemSelected(0),
+                                  hoverColor: Colors.amber.withOpacity(0.05),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.all(10.0),
+                                    decoration: BoxDecoration(
+                                      color: selectedIndex == 0 
+                                        ? Colors.amber.withOpacity(0.15) 
+                                        : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: selectedIndex == 0 
+                                          ? Colors.amber.withOpacity(0.5) 
+                                          : Colors.transparent,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.edit_note_rounded,
+                                      color: selectedIndex == 0 
+                                        ? Colors.amber 
+                                        : Colors.amber.withOpacity(0.7),
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                        ],
+                      );
+                    }),
                   );
-                }),
+                },
               ),
             ),
           ),
