@@ -9,6 +9,8 @@ class Victima {
   final int? idIncidente;
   final DateTime? fechahoraSolicitaDespacho;
   final DateTime? fechahoraConfirmaDespacho;
+  final String? descripcion;
+  final String? idMovilAsignado;
 
   Victima({
     this.idVictima,
@@ -21,6 +23,8 @@ class Victima {
     this.idIncidente,
     this.fechahoraSolicitaDespacho,
     this.fechahoraConfirmaDespacho,
+    this.descripcion,
+    this.idMovilAsignado,
   });
 
   factory Victima.fromJson(Map<String, dynamic> json) {
@@ -39,6 +43,8 @@ class Victima {
       fechahoraConfirmaDespacho: json['fechahora_confirma_despacho'] != null
           ? DateTime.tryParse(json['fechahora_confirma_despacho'])
           : null,
+      descripcion: json['descripcion'],
+      idMovilAsignado: json['id_movil_asignado'],
     );
   }
 
@@ -54,6 +60,8 @@ class Victima {
     if (idIncidente != null) map['idincidente'] = idIncidente;
     if (fechahoraSolicitaDespacho != null) map['fechahora_solicita_despacho'] = fechahoraSolicitaDespacho!.toIso8601String();
     if (fechahoraConfirmaDespacho != null) map['fechahora_confirma_despacho'] = fechahoraConfirmaDespacho!.toIso8601String();
+    if (descripcion != null) map['descripcion'] = descripcion;
+    if (idMovilAsignado != null) map['id_movil_asignado'] = idMovilAsignado;
     return map;
   }
 
@@ -68,6 +76,9 @@ class Victima {
     int? idIncidente,
     DateTime? fechahoraSolicitaDespacho,
     DateTime? fechahoraConfirmaDespacho,
+    String? descripcion,
+    String? idMovilAsignado,
+    bool clearMovil = false,
   }) {
     return Victima(
       idVictima: idVictima ?? this.idVictima,
@@ -80,6 +91,8 @@ class Victima {
       idIncidente: idIncidente ?? this.idIncidente,
       fechahoraSolicitaDespacho: fechahoraSolicitaDespacho ?? this.fechahoraSolicitaDespacho,
       fechahoraConfirmaDespacho: fechahoraConfirmaDespacho ?? this.fechahoraConfirmaDespacho,
+      descripcion: descripcion ?? this.descripcion,
+      idMovilAsignado: clearMovil ? null : (idMovilAsignado ?? this.idMovilAsignado),
     );
   }
 }

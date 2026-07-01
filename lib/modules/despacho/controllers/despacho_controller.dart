@@ -5,6 +5,7 @@ import '../../../shared/models/unidad.dart';
 import '../../../shared/models/movil.dart';
 import '../../../shared/models/demanda_recibida.dart';
 import '../../../shared/models/incidente.dart';
+import '../../../shared/models/victima.dart';
 import '../../../shared/services/listados_service.dart';
 
 class DespachoController extends ChangeNotifier {
@@ -175,6 +176,24 @@ class DespachoController extends ChangeNotifier {
               latitud: -38.9516,
               longitud: -68.0591,
               fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 15)),
+              victimas: [
+                Victima(
+                  idVictima: 801,
+                  nombresApellidos: 'Juan Carlos Pérez',
+                  dni: 24333888,
+                  edad: 45,
+                  idConfGenero: 1,
+                  descripcion: 'Paciente principal con dolor torácico agudo y disnea.',
+                ),
+                Victima(
+                  idVictima: 804,
+                  nombresApellidos: 'Esteban Quito',
+                  dni: 39555666,
+                  edad: 28,
+                  idConfGenero: 1,
+                  descripcion: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
+                ),
+              ],
             ),
           ),
           DemandaRecibida(
@@ -191,6 +210,32 @@ class DespachoController extends ChangeNotifier {
               latitud: -38.9592,
               longitud: -68.0588,
               fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 8)),
+              victimas: [
+                Victima(
+                  idVictima: 802,
+                  nombresApellidos: 'Marta Gómez',
+                  dni: 18444555,
+                  edad: 52,
+                  idConfGenero: 2,
+                  descripcion: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
+                ),
+                Victima(
+                  idVictima: 803,
+                  nombresApellidos: 'Carlos López',
+                  dni: 32111222,
+                  edad: 30,
+                  idConfGenero: 1,
+                  descripcion: 'Acompañante con heridas cortantes leves en rostro y manos.',
+                ),
+                Victima(
+                  idVictima: 805,
+                  nombresApellidos: 'Lucía Fernández',
+                  dni: 42111333,
+                  edad: 24,
+                  idConfGenero: 2,
+                  descripcion: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
+                ),
+              ],
             ),
           ),
         ];
@@ -215,6 +260,24 @@ class DespachoController extends ChangeNotifier {
             latitud: -38.9516,
             longitud: -68.0591,
             fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 15)),
+            victimas: [
+              Victima(
+                idVictima: 801,
+                nombresApellidos: 'Juan Carlos Pérez',
+                dni: 24333888,
+                edad: 45,
+                idConfGenero: 1,
+                descripcion: 'Paciente principal con dolor torácico agudo y disnea.',
+              ),
+              Victima(
+                idVictima: 804,
+                nombresApellidos: 'Esteban Quito',
+                dni: 39555666,
+                edad: 28,
+                idConfGenero: 1,
+                descripcion: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
+              ),
+            ],
           ),
         ),
         DemandaRecibida(
@@ -231,6 +294,32 @@ class DespachoController extends ChangeNotifier {
             latitud: -38.9592,
             longitud: -68.0588,
             fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 8)),
+            victimas: [
+              Victima(
+                idVictima: 802,
+                nombresApellidos: 'Marta Gómez',
+                dni: 18444555,
+                edad: 52,
+                idConfGenero: 2,
+                descripcion: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
+              ),
+              Victima(
+                idVictima: 803,
+                nombresApellidos: 'Carlos López',
+                dni: 32111222,
+                edad: 30,
+                idConfGenero: 1,
+                descripcion: 'Acompañante con heridas cortantes leves en rostro y manos.',
+              ),
+              Victima(
+                idVictima: 805,
+                nombresApellidos: 'Lucía Fernández',
+                dni: 42111333,
+                edad: 24,
+                idConfGenero: 2,
+                descripcion: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
+              ),
+            ],
           ),
         ),
       ];
@@ -396,6 +485,18 @@ class DespachoController extends ChangeNotifier {
           latitud: movil.id == 'm1' ? -38.9515 : (movil.id == 'm2' ? -38.9580 : -38.9480),
           longitud: movil.id == 'm1' ? -68.0610 : (movil.id == 'm2' ? -68.0520 : -68.0750),
         );
+        // Limpiar la asignación de este móvil en cualquier víctima de los incidentes activos
+        for (var dem in _incidentesActivos) {
+          if (dem.incidente?.victimas != null) {
+            for (int i = 0; i < dem.incidente!.victimas!.length; i++) {
+              if (dem.incidente!.victimas![i].idMovilAsignado == idMovil) {
+                dem.incidente!.victimas![i] = dem.incidente!.victimas![i].copyWith(
+                  clearMovil: true,
+                );
+              }
+            }
+          }
+        }
       } else {
         _moviles[mIndex] = movil.copyWith(estado: nuevoEstado);
       }
@@ -403,6 +504,77 @@ class DespachoController extends ChangeNotifier {
       _guardarMoviles();
       notifyListeners();
     }
+  }
+
+  void asignarMovilAVictima(int idIncidente, int idVictima, String? idMovil) {
+    // 1. Encontrar el incidente y la víctima
+    final incIndex = _incidentesActivos.indexWhere(
+      (element) => element.incidente?.idIncidente == idIncidente || element.idDemandaRecibida == idIncidente
+    );
+    if (incIndex == -1) return;
+
+    final incident = _incidentesActivos[incIndex].incidente;
+    if (incident == null || incident.victimas == null) return;
+
+    final vIndex = incident.victimas!.indexWhere((v) => v.idVictima == idVictima);
+    if (vIndex == -1) return;
+
+    // Obtener el móvil anterior asignado a esta víctima
+    final oldMovilId = incident.victimas![vIndex].idMovilAsignado;
+
+    // 2. Actualizar el móvil asignado en la víctima
+    final victimaActualizada = incident.victimas![vIndex].copyWith(
+      idMovilAsignado: idMovil,
+      clearMovil: idMovil == null,
+    );
+    incident.victimas![vIndex] = victimaActualizada;
+
+    // 3. Si había un móvil asignado anteriormente, y ya no está asignado a ninguna otra víctima de este incidente, liberarlo
+    if (oldMovilId != null && oldMovilId != idMovil) {
+      bool sigueEnUso = false;
+      for (var dem in _incidentesActivos) {
+        if (dem.incidente?.victimas != null) {
+          for (var vic in dem.incidente!.victimas!) {
+            if (vic.idMovilAsignado == oldMovilId) {
+              sigueEnUso = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!sigueEnUso) {
+        final mIndex = _moviles.indexWhere((m) => m.id == oldMovilId);
+        if (mIndex != -1) {
+          _moviles[mIndex] = _moviles[mIndex].copyWith(
+            estado: 'Disponible',
+            clearIncidente: true,
+            latitud: oldMovilId == 'm1' ? -38.9515 : (oldMovilId == 'm2' ? -38.9580 : -38.9480),
+            longitud: oldMovilId == 'm1' ? -68.0610 : (oldMovilId == 'm2' ? -68.0520 : -68.0750),
+          );
+        }
+      }
+    }
+
+    // 4. Si se asigna un nuevo móvil
+    if (idMovil != null) {
+      final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
+      if (mIndex != -1) {
+        double offsetLat = 0.002;
+        double offsetLng = 0.002;
+        double destLat = (incident.latitud ?? -38.9516) + offsetLat;
+        double destLng = (incident.longitud ?? -68.0591) + offsetLng;
+
+        _moviles[mIndex] = _moviles[mIndex].copyWith(
+          estado: 'Despachado',
+          idIncidenteActivo: idIncidente,
+          latitud: destLat,
+          longitud: destLng,
+        );
+      }
+    }
+
+    _guardarMoviles();
+    notifyListeners();
   }
 
   void liberarMovilDeIncidente(String idMovil) {

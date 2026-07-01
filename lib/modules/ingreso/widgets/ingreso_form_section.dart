@@ -331,6 +331,65 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
               ),
             ),
           ],
+          if (_ingresoController.tieneBorrador) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E2429),
+                      title: const Text('¿Descartar Borrador?', style: TextStyle(color: Colors.white)),
+                      content: const Text(
+                        'Se borrarán todos los datos cargados en este formulario y se iniciará una ficha limpia. Esta acción no se puede deshacer.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Descartar', style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await _ingresoController.limpiarBorrador();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Borrador descartado correctamente.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                label: const Text(
+                  'DESCARTAR BORRADOR',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent, width: 1),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
         if (!_ingresoController.vistaFormulario) ...[
           Row(
