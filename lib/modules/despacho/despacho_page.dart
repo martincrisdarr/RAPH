@@ -529,8 +529,7 @@ Widget _buildMapContainer(ThemeData theme) {
     // Obtener IDs de móviles ya asignados a alguna víctima en cualquier incidente activo
     final assignedMobileIds = _controller.incidentesActivos
         .expand((d) => d.incidente?.victimas ?? <Victima>[])
-        .map((v) => v.idMovilAsignado)
-        .whereType<String>()
+        .expand((v) => v.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? <String>[])
         .toSet();
 
     // Obtener móviles disponibles para despachar (tienen vehículo asignado, no están inactivos y no están ocupados por otra víctima)
@@ -596,20 +595,10 @@ Widget _buildMapContainer(ThemeData theme) {
               )
             else
               ...victimas.map((v) {
-                final isAssigned = v.idMovilAsignado != null;
-                
-                Movil? movilAsignado;
-                Unidad? unidadAsignada;
-                if (isAssigned) {
-                  final mIndex = _controller.moviles.indexWhere((m) => m.id == v.idMovilAsignado);
-                  if (mIndex != -1) {
-                    movilAsignado = _controller.moviles[mIndex];
-                    final uIndex = _controller.unidades.indexWhere((u) => u.id == movilAsignado!.idUnidadAsignada);
-                    if (uIndex != -1) {
-                      unidadAsignada = _controller.unidades[uIndex];
-                    }
-                  }
-                }
+                final assignedIds = v.idMovilAsignado != null && v.idMovilAsignado!.isNotEmpty
+                    ? v.idMovilAsignado!.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+                    : <String>[];
+                final isAssigned = assignedIds.isNotEmpty;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -665,10 +654,10 @@ Widget _buildMapContainer(ThemeData theme) {
                         ],
                       ),
                       
-                      if (v.descripcion != null && v.descripcion!.isNotEmpty) ...[
+                      if (v.observaciones != null && v.observaciones!.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(
-                          v.descripcion!,
+                          v.observaciones!,
                           style: const TextStyle(
                             color: Colors.white38,
                             fontSize: 12.5,
@@ -681,112 +670,122 @@ Widget _buildMapContainer(ThemeData theme) {
                       const Divider(color: Colors.white10, height: 1),
                       const SizedBox(height: 12),
                       
-                      // Gestión del móvil asignado
-                      if (movilAsignado != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: AppColors.accentBlue.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(AppRadii.sm),
-                            border: Border.all(color: AppColors.accentBlue.withOpacity(0.2)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.airport_shuttle, size: 14, color: AppColors.accentBlue),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        movilAsignado.nombre,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13.5,
-                                          color: Colors.white,
+                      // Gestión de móviles asignados
+                      if (isAssigned) ...[
+                        ...assignedIds.map((mId) {
+                          final mIndex = _controller.moviles.indexWhere((m) => m.id == mId);
+                          if (mIndex == -1) return const SizedBox.shrink();
+                          final movilAsignado = _controller.moviles[mIndex];
+                          
+                          final uIndex = _controller.unidades.indexWhere((u) => u.id == movilAsignado.idUnidadAsignada);
+                          final unidadAsignada = uIndex != -1 ? _controller.unidades[uIndex] : null;
+                          
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: AppColors.accentBlue.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(AppRadii.sm),
+                              border: Border.all(color: AppColors.accentBlue.withOpacity(0.2)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.airport_shuttle, size: 14, color: AppColors.accentBlue),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          movilAsignado.nombre,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13.5,
+                                            color: Colors.white,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)).withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(AppRadii.xs),
-                                      border: Border.all(
-                                        color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)).withOpacity(0.3),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      movilAsignado.estado.toUpperCase(),
-                                      style: TextStyle(
-                                        color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)),
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (unidadAsignada != null) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Vehículo: ${unidadAsignada.marca} (${unidadAsignada.patente}) • Tipo: ${unidadAsignada.tipo}',
-                                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                                ),
-                              ],
-                              if (movilAsignado.personal != null) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Tripulación: ${movilAsignado.personal}',
-                                  style: const TextStyle(color: Colors.white38, fontSize: 10.5),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Estado:',
-                                    style: TextStyle(color: Colors.white54, fontSize: 11),
-                                  ),
-                                  DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: movilAsignado.estado,
-                                      dropdownColor: AppColors.surface,
-                                      icon: const Icon(Icons.arrow_drop_down, size: 16, color: Colors.white70),
-                                      style: const TextStyle(fontSize: 12, color: Colors.white),
-                                      isDense: true,
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          if (val == 'Finalizado') {
-                                            _controller.asignarMovilAVictima(
-                                              idIncidenteActual,
-                                              v.idVictima!,
-                                              null,
-                                            );
-                                          } else {
-                                            _controller.actualizarEstadoMovil(movilAsignado!.id, val);
-                                          }
-                                        }
-                                      },
-                                      items: const [
-                                        DropdownMenuItem(value: 'Despachado', child: Text('Despachado')),
-                                        DropdownMenuItem(value: 'En sitio', child: Text('En sitio')),
-                                        DropdownMenuItem(value: 'Traslado', child: Text('Traslado')),
-                                        DropdownMenuItem(value: 'Finalizado', child: Text('Finalizar (Liberar)')),
                                       ],
                                     ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)).withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(AppRadii.xs),
+                                        border: Border.all(
+                                          color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)).withOpacity(0.3),
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        movilAsignado.estado.toUpperCase(),
+                                        style: TextStyle(
+                                          color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)),
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (unidadAsignada != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Vehículo: ${unidadAsignada.marca} (${unidadAsignada.patente}) • Tipo: ${unidadAsignada.tipo}',
+                                    style: const TextStyle(color: Colors.white54, fontSize: 11),
                                   ),
                                 ],
-                              ),
-                            ],
-                          ),
-                        ),
+                                if (movilAsignado.personal != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Tripulación: ${movilAsignado.personal}',
+                                    style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Estado:',
+                                      style: TextStyle(color: Colors.white54, fontSize: 11),
+                                    ),
+                                    DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: movilAsignado.estado,
+                                        dropdownColor: AppColors.surface,
+                                        icon: const Icon(Icons.arrow_drop_down, size: 16, color: Colors.white70),
+                                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                                        isDense: true,
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            if (val == 'Finalizado') {
+                                              _controller.removerMovilDeVictima(
+                                                idIncidenteActual,
+                                                v.idVictima!,
+                                                movilAsignado.id,
+                                              );
+                                            } else {
+                                              _controller.actualizarEstadoMovil(movilAsignado.id, val);
+                                            }
+                                          }
+                                        },
+                                        items: const [
+                                          DropdownMenuItem(value: 'Despachado', child: Text('Despachado')),
+                                          DropdownMenuItem(value: 'En sitio', child: Text('En sitio')),
+                                          DropdownMenuItem(value: 'Traslado', child: Text('Traslado')),
+                                          DropdownMenuItem(value: 'Finalizado', child: Text('Finalizar (Liberar)')),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
                       ] else ...[
                         Row(
                           children: [
@@ -802,74 +801,74 @@ Widget _buildMapContainer(ThemeData theme) {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        if (despachables.isEmpty)
-                          const Text(
-                            'No hay móviles disponibles',
-                            style: TextStyle(color: Colors.white24, fontSize: 11, fontStyle: FontStyle.italic),
-                          )
-                        else ...[
-                          const Text(
-                            'Despachar rápido:',
-                            style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          ...despachables.map((m) {
-                            final uList = _controller.unidades.where((u) => u.id == m.idUnidadAsignada).toList();
-                            final u = uList.isNotEmpty ? uList.first : null;
-                            
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentBlue.withOpacity(0.04),
-                                borderRadius: BorderRadius.circular(AppRadii.sm),
-                                border: Border.all(
-                                  color: AppColors.accentBlue.withOpacity(0.2),
-                                  width: 0.8,
+                      ],
+                      const SizedBox(height: 10),
+                      if (despachables.isEmpty)
+                        const Text(
+                          'No hay móviles disponibles',
+                          style: TextStyle(color: Colors.white24, fontSize: 11, fontStyle: FontStyle.italic),
+                        )
+                      else ...[
+                        Text(
+                          isAssigned ? 'Despachar otro móvil:' : 'Despachar rápido:',
+                          style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        ...despachables.map((m) {
+                          final uList = _controller.unidades.where((u) => u.id == m.idUnidadAsignada).toList();
+                          final u = uList.isNotEmpty ? uList.first : null;
+                          
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentBlue.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(AppRadii.sm),
+                              border: Border.all(
+                                color: AppColors.accentBlue.withOpacity(0.2),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                              dense: true,
+                              leading: const Icon(Icons.airport_shuttle_outlined, size: 16, color: AppColors.accentBlue),
+                              title: Text(
+                                m.nombre,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.5,
                                 ),
                               ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                                dense: true,
-                                leading: const Icon(Icons.airport_shuttle_outlined, size: 16, color: AppColors.accentBlue),
-                                title: Text(
-                                  m.nombre,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13.5,
+                              subtitle: Text(
+                                '${u != null ? "${u.marca} (${u.patente}) • Tipo: ${u.tipo}" : "Sin vehículo"}\nTripulación: ${m.personal ?? "No informada"}',
+                                style: const TextStyle(color: Colors.white38, fontSize: 10.5, height: 1.2),
+                              ),
+                              trailing: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accentBlue,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: const Size(60, 26),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(AppRadii.xs),
                                   ),
                                 ),
-                                subtitle: Text(
-                                  '${u != null ? "${u.marca} (${u.patente}) • Tipo: ${u.tipo}" : "Sin vehículo"}\nTripulación: ${m.personal ?? "No informada"}',
-                                  style: const TextStyle(color: Colors.white38, fontSize: 10.5, height: 1.2),
-                                ),
-                                trailing: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.accentBlue,
-                                    foregroundColor: Colors.black,
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                    minimumSize: const Size(60, 26),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(AppRadii.xs),
-                                    ),
-                                  ),
-                                  onPressed: () {
-                                    _controller.asignarMovilAVictima(
-                                      idIncidenteActual,
-                                      v.idVictima!,
-                                      m.id,
-                                    );
-                                  },
-                                  child: const Text(
-                                    'DESPACHAR',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-                                  ),
+                                onPressed: () {
+                                  _controller.asignarMovilAVictima(
+                                    idIncidenteActual,
+                                    v.idVictima!,
+                                    m.id,
+                                  );
+                                },
+                                child: const Text(
+                                  'DESPACHAR',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
                                 ),
                               ),
-                            );
-                          }),
-                        ],
+                            ),
+                          );
+                        }),
                       ],
                     ],
                   ),
@@ -1547,6 +1546,8 @@ Widget _buildMapContainer(ThemeData theme) {
       ),
     );
   }
+
+
 }
 
 // ==========================================

@@ -13,8 +13,9 @@ class VictimaData {
   List<String> sintomasSeleccionados = [];
   String busqueda = '';
   List<PlatformFile> archivosAdjuntos = [];
-  String descripcion = '';
+  String observaciones = '';
   String? idMovilAsignado;
+  String? reporte;
 
   Victima toVictima(int? idIncidente) {
     return Victima(
@@ -27,8 +28,9 @@ class VictimaData {
           ? sintomasSeleccionados.join(', ')
           : null,
       idIncidente: idIncidente,
-      descripcion: descripcion.isNotEmpty ? descripcion : null,
+      observaciones: observaciones.isNotEmpty ? observaciones : null,
       idMovilAsignado: idMovilAsignado,
+      reporte: reporte,
     );
   }
 
@@ -41,8 +43,9 @@ class VictimaData {
         'dni': dni,
         'codigoTriage': codigoTriage,
         'sintomasSeleccionados': sintomasSeleccionados,
-        'descripcion': descripcion,
+        'observaciones': observaciones,
         'idMovilAsignado': idMovilAsignado,
+        'reporte': reporte,
       };
 
   static VictimaData fromStorageJson(Map<String, dynamic> json) {
@@ -55,8 +58,9 @@ class VictimaData {
     v.dni = json['dni'] ?? '';
     v.codigoTriage = json['codigoTriage'];
     v.sintomasSeleccionados = List<String>.from(json['sintomasSeleccionados'] ?? []);
-    v.descripcion = json['descripcion'] ?? '';
+    v.observaciones = json['observaciones'] ?? '';
     v.idMovilAsignado = json['idMovilAsignado'];
+    v.reporte = json['reporte'];
     return v;
   }
 
@@ -67,8 +71,9 @@ class VictimaData {
     v.edad = victima.edad?.toString() ?? '';
     v.idConfGenero = victima.idConfGenero;
     v.dni = victima.dni?.toString() ?? '';
-    v.descripcion = victima.descripcion ?? '';
+    v.observaciones = victima.observaciones ?? '';
     v.idMovilAsignado = victima.idMovilAsignado;
+    v.reporte = victima.reporte;
     if (victima.estadoActual != null && victima.estadoActual!.isNotEmpty) {
       v.sintomasSeleccionados = victima.estadoActual!.split(',').map((s) => s.trim()).toList();
     }

@@ -164,6 +164,7 @@ class IngresoController extends ChangeNotifier {
     double? longitud,
     String? direccionAuto,
     String? descripcion,
+    String? codigoTriage,
   }) {
     _incidenteActual = _incidenteActual.copyWith(
       direccion: direccion,
@@ -172,6 +173,7 @@ class IngresoController extends ChangeNotifier {
       longitud: longitud,
       direccionAuto: direccionAuto,
       descripcion: descripcion,
+      codigoTriage: codigoTriage,
     );
 
     _guardarBorrador();
@@ -285,7 +287,7 @@ class IngresoController extends ChangeNotifier {
     String? dni,
     String? codigoTriage,
     List<String>? sintomas,
-    String? descripcion,
+    String? observaciones,
   }) {
     if (index >= 0 && index < _victimas.length) {
       final v = _victimas[index];
@@ -304,7 +306,7 @@ class IngresoController extends ChangeNotifier {
       if (dni != null) v.dni = dni;
       if (codigoTriage != null) v.codigoTriage = codigoTriage;
       if (sintomas != null) v.sintomasSeleccionados = sintomas;
-      if (descripcion != null) v.descripcion = descripcion;
+      if (observaciones != null) v.observaciones = observaciones;
       
       if (shouldNotifyImmediately) {
         notifyListeners();
