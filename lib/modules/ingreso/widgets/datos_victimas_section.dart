@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../controllers/ingreso_controller.dart';
 import '../../../shared/models/victima_data.dart';
 import '../../../shared/components/custom_select.dart';
@@ -19,6 +20,21 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
   final _ingresoController = IngresoController();
   late TabController _victimasTabController;
   int _lastVictimasCount = 0;
+
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+  int? _listeningVictimaIndex;
+  String _textBeforeListening = '';
+  Map<String, TextEditingController>? _observacionesControllers;
+
+  TextEditingController _getObservacionesController(VictimaData victima) {
+    _observacionesControllers ??= {};
+    return _observacionesControllers!.putIfAbsent(
+      victima.id,
+      () => TextEditingController(text: victima.observaciones),
+    );
+  }
 
   final List<String> _etiquetasSintomas = [
     'Dolor de pecho',
@@ -42,6 +58,13 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
     _victimasTabController.addListener(() {
       if (!_victimasTabController.indexIsChanging) {
         _ingresoController.selectedVictimaIndex = _victimasTabController.index;
+        if (_isListening) {
+          _speech.stop();
+          setState(() {
+            _isListening = false;
+            _listeningVictimaIndex = null;
+          });
+        }
       }
     });
 
@@ -50,6 +73,16 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   void _onControllerUpdate() {
     if (mounted) {
+      // Sincronizar controladores de observaciones con los datos del modelo
+      if (_observacionesControllers != null) {
+        for (var victima in _ingresoController.victimas) {
+          final controller = _observacionesControllers![victima.id];
+          if (controller != null && controller.text != victima.observaciones) {
+            controller.text = victima.observaciones;
+          }
+        }
+      }
+
       if (_ingresoController.victimas.length != _lastVictimasCount) {
         _lastVictimasCount = _ingresoController.victimas.length;
         _victimasTabController.dispose();
@@ -61,6 +94,13 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
         _victimasTabController.addListener(() {
           if (!_victimasTabController.indexIsChanging) {
             _ingresoController.selectedVictimaIndex = _victimasTabController.index;
+            if (_isListening) {
+              _speech.stop();
+              setState(() {
+                _isListening = false;
+                _listeningVictimaIndex = null;
+              });
+            }
           }
         });
       }
@@ -73,10 +113,103 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
     }
   }
 
+  Future<void> _toggleListening(int index, VictimaData victima) async {
+    if (!_isListening) {
+      if (!_speechAvailable) {
+        try {
+          bool initialized = await _speech.initialize(
+            onStatus: (status) {
+              debugPrint('Speech status: $status');
+              if (status == 'done' || status == 'notListening') {
+                setState(() {
+                  _isListening = false;
+                  _listeningVictimaIndex = null;
+                });
+              }
+            },
+            onError: (errorNotification) {
+              debugPrint('Speech error: $errorNotification');
+              setState(() {
+                _isListening = false;
+                _listeningVictimaIndex = null;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error de dictado: ${errorNotification.errorMsg}'),
+                  backgroundColor: Colors.red.shade800,
+                ),
+              );
+            },
+          );
+          if (initialized) {
+            _speechAvailable = true;
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('El reconocimiento de voz no está disponible en este dispositivo')),
+            );
+            return;
+          }
+        } catch (e) {
+          debugPrint('Speech initialization exception: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo iniciar el servicio de voz. Revisa los permisos de micrófono.')),
+          );
+          return;
+        }
+      }
+
+      final controller = _getObservacionesController(victima);
+      _textBeforeListening = controller.text;
+      
+      setState(() {
+        _isListening = true;
+        _listeningVictimaIndex = index;
+      });
+
+      _speech.listen(
+        onResult: (result) {
+          setState(() {
+            final recognized = result.recognizedWords;
+            if (recognized.isNotEmpty) {
+              final currentController = _getObservacionesController(victima);
+              if (_textBeforeListening.isEmpty) {
+                currentController.text = recognized;
+              } else {
+                final lastChar = _textBeforeListening[_textBeforeListening.length - 1];
+                final separator = (lastChar == ' ' || lastChar == '\n') ? '' : ' ';
+                currentController.text = '$_textBeforeListening$separator$recognized';
+              }
+              // Mover cursor al final
+              currentController.selection = TextSelection.fromPosition(
+                TextPosition(offset: currentController.text.length),
+              );
+              // Sincronizar con el controller
+              _ingresoController.updateVictima(index, observaciones: currentController.text);
+            }
+          });
+        },
+        localeId: 'es_AR',
+        cancelOnError: true,
+      );
+    } else {
+      setState(() {
+        _isListening = false;
+        _listeningVictimaIndex = null;
+      });
+      _speech.stop();
+    }
+  }
+
   @override
   void dispose() {
     _ingresoController.removeListener(_onControllerUpdate);
     _victimasTabController.dispose();
+    if (_observacionesControllers != null) {
+      for (var controller in _observacionesControllers!.values) {
+        controller.dispose();
+      }
+    }
+    _speech.stop();
     super.dispose();
   }
 
@@ -233,10 +366,43 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
           ),
           const SizedBox(height: 12),
           TextFormField(
-            initialValue: victima.descripcion,
-            decoration: const InputDecoration(labelText: 'Descripción'),
+            controller: _getObservacionesController(victima),
+            decoration: InputDecoration(
+              labelText: 'Observaciones',
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  widthFactor: 1.0,
+                  heightFactor: 1.0,
+                  child: Tooltip(
+                    message: (_isListening && _listeningVictimaIndex == index)
+                        ? 'Detener dictado por voz'
+                        : 'Dictar por voz',
+                    child: Material(
+                      color: (_isListening && _listeningVictimaIndex == index)
+                          ? Colors.red.withOpacity(0.2)
+                          : Colors.transparent,
+                      type: MaterialType.circle,
+                      clipBehavior: Clip.antiAlias,
+                      child: IconButton(
+                        icon: Icon(
+                          (_isListening && _listeningVictimaIndex == index)
+                              ? Icons.mic
+                              : Icons.mic_none,
+                          color: (_isListening && _listeningVictimaIndex == index)
+                              ? Colors.redAccent
+                              : Colors.white70,
+                        ),
+                        onPressed: () => _toggleListening(index, victima),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             maxLines: 2,
-            onChanged: (val) => _ingresoController.updateVictima(index, descripcion: val),
+            onChanged: (val) => _ingresoController.updateVictima(index, observaciones: val),
           ),
           const SizedBox(height: 20),
           const Divider(color: Colors.white10),

@@ -7,6 +7,7 @@ import '../../../shared/models/demanda_recibida.dart';
 import '../../../shared/models/incidente.dart';
 import '../../../shared/models/victima.dart';
 import '../../../shared/services/listados_service.dart';
+import '../../../shared/services/demanda_recibida_service.dart';
 
 class DespachoController extends ChangeNotifier {
   static final DespachoController _instance = DespachoController._internal();
@@ -183,7 +184,7 @@ class DespachoController extends ChangeNotifier {
                   dni: 24333888,
                   edad: 45,
                   idConfGenero: 1,
-                  descripcion: 'Paciente principal con dolor torácico agudo y disnea.',
+                  observaciones: 'Paciente principal con dolor torácico agudo y disnea.',
                 ),
                 Victima(
                   idVictima: 804,
@@ -191,7 +192,7 @@ class DespachoController extends ChangeNotifier {
                   dni: 39555666,
                   edad: 28,
                   idConfGenero: 1,
-                  descripcion: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
+                  observaciones: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
                 ),
               ],
             ),
@@ -217,7 +218,7 @@ class DespachoController extends ChangeNotifier {
                   dni: 18444555,
                   edad: 52,
                   idConfGenero: 2,
-                  descripcion: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
+                  observaciones: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
                 ),
                 Victima(
                   idVictima: 803,
@@ -225,7 +226,7 @@ class DespachoController extends ChangeNotifier {
                   dni: 32111222,
                   edad: 30,
                   idConfGenero: 1,
-                  descripcion: 'Acompañante con heridas cortantes leves en rostro y manos.',
+                  observaciones: 'Acompañante con heridas cortantes leves en rostro y manos.',
                 ),
                 Victima(
                   idVictima: 805,
@@ -233,7 +234,7 @@ class DespachoController extends ChangeNotifier {
                   dni: 42111333,
                   edad: 24,
                   idConfGenero: 2,
-                  descripcion: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
+                  observaciones: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
                 ),
               ],
             ),
@@ -267,7 +268,7 @@ class DespachoController extends ChangeNotifier {
                 dni: 24333888,
                 edad: 45,
                 idConfGenero: 1,
-                descripcion: 'Paciente principal con dolor torácico agudo y disnea.',
+                observaciones: 'Paciente principal con dolor torácico agudo y disnea.',
               ),
               Victima(
                 idVictima: 804,
@@ -275,7 +276,7 @@ class DespachoController extends ChangeNotifier {
                 dni: 39555666,
                 edad: 28,
                 idConfGenero: 1,
-                descripcion: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
+                observaciones: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
               ),
             ],
           ),
@@ -301,7 +302,7 @@ class DespachoController extends ChangeNotifier {
                 dni: 18444555,
                 edad: 52,
                 idConfGenero: 2,
-                descripcion: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
+                observaciones: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
               ),
               Victima(
                 idVictima: 803,
@@ -309,7 +310,7 @@ class DespachoController extends ChangeNotifier {
                 dni: 32111222,
                 edad: 30,
                 idConfGenero: 1,
-                descripcion: 'Acompañante con heridas cortantes leves en rostro y manos.',
+                observaciones: 'Acompañante con heridas cortantes leves en rostro y manos.',
               ),
               Victima(
                 idVictima: 805,
@@ -317,7 +318,7 @@ class DespachoController extends ChangeNotifier {
                 dni: 42111333,
                 edad: 24,
                 idConfGenero: 2,
-                descripcion: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
+                observaciones: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
               ),
             ],
           ),
@@ -485,14 +486,21 @@ class DespachoController extends ChangeNotifier {
           latitud: movil.id == 'm1' ? -38.9515 : (movil.id == 'm2' ? -38.9580 : -38.9480),
           longitud: movil.id == 'm1' ? -68.0610 : (movil.id == 'm2' ? -68.0520 : -68.0750),
         );
-        // Limpiar la asignación de este móvil en cualquier víctima de los incidentes activos
+        // Limpiar la asignación de este móvil en cualquier víctima de los incidentes activos (split por comas)
         for (var dem in _incidentesActivos) {
           if (dem.incidente?.victimas != null) {
             for (int i = 0; i < dem.incidente!.victimas!.length; i++) {
-              if (dem.incidente!.victimas![i].idMovilAsignado == idMovil) {
-                dem.incidente!.victimas![i] = dem.incidente!.victimas![i].copyWith(
-                  clearMovil: true,
-                );
+              final currentAssigned = dem.incidente!.victimas![i].idMovilAsignado;
+              if (currentAssigned != null && currentAssigned.isNotEmpty) {
+                final List<String> list = currentAssigned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                if (list.contains(idMovil)) {
+                  list.remove(idMovil);
+                  final nuevoString = list.isNotEmpty ? list.join(',') : null;
+                  dem.incidente!.victimas![i] = dem.incidente!.victimas![i].copyWith(
+                    idMovilAsignado: nuevoString,
+                    clearMovil: nuevoString == null,
+                  );
+                }
               }
             }
           }
@@ -507,6 +515,8 @@ class DespachoController extends ChangeNotifier {
   }
 
   void asignarMovilAVictima(int idIncidente, int idVictima, String? idMovil) {
+    if (idMovil == null) return;
+
     // 1. Encontrar el incidente y la víctima
     final incIndex = _incidentesActivos.indexWhere(
       (element) => element.incidente?.idIncidente == idIncidente || element.idDemandaRecibida == idIncidente
@@ -519,56 +529,94 @@ class DespachoController extends ChangeNotifier {
     final vIndex = incident.victimas!.indexWhere((v) => v.idVictima == idVictima);
     if (vIndex == -1) return;
 
-    // Obtener el móvil anterior asignado a esta víctima
-    final oldMovilId = incident.victimas![vIndex].idMovilAsignado;
+    // Obtener asignación actual y añadir el ID del nuevo móvil si no existe ya
+    final currentAssigned = incident.victimas![vIndex].idMovilAsignado;
+    final List<String> list = currentAssigned != null && currentAssigned.isNotEmpty
+        ? currentAssigned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+        : [];
+        
+    if (!list.contains(idMovil)) {
+      list.add(idMovil);
+    }
+    final nuevoString = list.join(',');
 
     // 2. Actualizar el móvil asignado en la víctima
     final victimaActualizada = incident.victimas![vIndex].copyWith(
-      idMovilAsignado: idMovil,
-      clearMovil: idMovil == null,
+      idMovilAsignado: nuevoString,
     );
     incident.victimas![vIndex] = victimaActualizada;
 
-    // 3. Si había un móvil asignado anteriormente, y ya no está asignado a ninguna otra víctima de este incidente, liberarlo
-    if (oldMovilId != null && oldMovilId != idMovil) {
-      bool sigueEnUso = false;
-      for (var dem in _incidentesActivos) {
-        if (dem.incidente?.victimas != null) {
-          for (var vic in dem.incidente!.victimas!) {
-            if (vic.idMovilAsignado == oldMovilId) {
-              sigueEnUso = true;
-              break;
-            }
+    // 3. Poner el móvil en estado Despachado
+    final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
+    if (mIndex != -1) {
+      double offsetLat = 0.002;
+      double offsetLng = 0.002;
+      double destLat = (incident.latitud ?? -38.9516) + offsetLat;
+      double destLng = (incident.longitud ?? -68.0591) + offsetLng;
+
+      _moviles[mIndex] = _moviles[mIndex].copyWith(
+        estado: 'Despachado',
+        idIncidenteActivo: idIncidente,
+        latitud: destLat,
+        longitud: destLng,
+      );
+    }
+
+    _guardarMoviles();
+    notifyListeners();
+  }
+
+  void removerMovilDeVictima(int idIncidente, int idVictima, String idMovil) {
+    // 1. Encontrar el incidente y la víctima
+    final incIndex = _incidentesActivos.indexWhere(
+      (element) => element.incidente?.idIncidente == idIncidente || element.idDemandaRecibida == idIncidente
+    );
+    if (incIndex == -1) return;
+
+    final incident = _incidentesActivos[incIndex].incidente;
+    if (incident == null || incident.victimas == null) return;
+
+    final vIndex = incident.victimas!.indexWhere((v) => v.idVictima == idVictima);
+    if (vIndex == -1) return;
+
+    // Obtener asignación actual y remover el ID del móvil especificado
+    final currentAssigned = incident.victimas![vIndex].idMovilAsignado;
+    if (currentAssigned == null || currentAssigned.isEmpty) return;
+
+    final List<String> list = currentAssigned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    list.remove(idMovil);
+    final nuevoString = list.isNotEmpty ? list.join(',') : null;
+
+    // 2. Actualizar el móvil asignado en la víctima
+    final victimaActualizada = incident.victimas![vIndex].copyWith(
+      idMovilAsignado: nuevoString,
+      clearMovil: nuevoString == null,
+    );
+    incident.victimas![vIndex] = victimaActualizada;
+
+    // 3. Si el móvil ya no está asignado a ninguna víctima de los incidentes activos, liberarlo
+    bool sigueEnUso = false;
+    for (var dem in _incidentesActivos) {
+      if (dem.incidente?.victimas != null) {
+        for (var vic in dem.incidente!.victimas!) {
+          final vicAssigned = vic.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? [];
+          if (vicAssigned.contains(idMovil)) {
+            sigueEnUso = true;
+            break;
           }
         }
       }
-      if (!sigueEnUso) {
-        final mIndex = _moviles.indexWhere((m) => m.id == oldMovilId);
-        if (mIndex != -1) {
-          _moviles[mIndex] = _moviles[mIndex].copyWith(
-            estado: 'Disponible',
-            clearIncidente: true,
-            latitud: oldMovilId == 'm1' ? -38.9515 : (oldMovilId == 'm2' ? -38.9580 : -38.9480),
-            longitud: oldMovilId == 'm1' ? -68.0610 : (oldMovilId == 'm2' ? -68.0520 : -68.0750),
-          );
-        }
-      }
+      if (sigueEnUso) break;
     }
 
-    // 4. Si se asigna un nuevo móvil
-    if (idMovil != null) {
+    if (!sigueEnUso) {
       final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
       if (mIndex != -1) {
-        double offsetLat = 0.002;
-        double offsetLng = 0.002;
-        double destLat = (incident.latitud ?? -38.9516) + offsetLat;
-        double destLng = (incident.longitud ?? -68.0591) + offsetLng;
-
         _moviles[mIndex] = _moviles[mIndex].copyWith(
-          estado: 'Despachado',
-          idIncidenteActivo: idIncidente,
-          latitud: destLat,
-          longitud: destLng,
+          estado: 'Disponible',
+          clearIncidente: true,
+          latitud: idMovil == 'm1' ? -38.9515 : (idMovil == 'm2' ? -38.9580 : -38.9480),
+          longitud: idMovil == 'm1' ? -68.0610 : (idMovil == 'm2' ? -68.0520 : -68.0750),
         );
       }
     }
@@ -579,5 +627,64 @@ class DespachoController extends ChangeNotifier {
 
   void liberarMovilDeIncidente(String idMovil) {
     actualizarEstadoMovil(idMovil, 'Disponible');
+  }
+
+  Future<void> cerrarIncidente(int idDemandaRecibida, String reporteIncidente, Map<int, String> reportesVictimas) async {
+    // 1. Encontrar la demanda/incidente activo en la lista local
+    final index = _incidentesActivos.indexWhere((element) => element.idDemandaRecibida == idDemandaRecibida);
+    if (index == -1) return;
+
+    final demanda = _incidentesActivos[index];
+    final incidente = demanda.incidente;
+    if (incidente == null) return;
+
+    // 2. Liberar todos los móviles que estuviesen asignados a las víctimas de este incidente
+    if (incidente.victimas != null) {
+      for (var vic in incidente.victimas!) {
+        final assignedIds = vic.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? [];
+        for (var mId in assignedIds) {
+          final mIndex = _moviles.indexWhere((m) => m.id == mId);
+          if (mIndex != -1) {
+            _moviles[mIndex] = _moviles[mIndex].copyWith(
+              estado: 'Disponible',
+              clearIncidente: true,
+              latitud: mId == 'm1' ? -38.9515 : (mId == 'm2' ? -38.9580 : -38.9480),
+              longitud: mId == 'm1' ? -68.0610 : (mId == 'm2' ? -68.0520 : -68.0750),
+            );
+          }
+        }
+      }
+    }
+
+    // 3. Crear el nuevo Incidente y las nuevas Víctimas con sus reportes cargados
+    List<Victima>? victimasActualizadas;
+    if (incidente.victimas != null) {
+      victimasActualizadas = incidente.victimas!.map((v) {
+        final reporte = reportesVictimas[v.idVictima] ?? '';
+        return v.copyWith(
+          reporte: reporte.isNotEmpty ? reporte : null,
+          clearMovil: true, // Liberar móvil
+        );
+      }).toList();
+    }
+
+    final incidenteActualizado = incidente.copyWith(
+      reporte: reporteIncidente.isNotEmpty ? reporteIncidente : null,
+      victimas: victimasActualizadas,
+    );
+
+    // 4. Actualizar la demanda recibida con el nuevo estado (7 = Finalizado)
+    final demandaActualizada = demanda.copyWith(
+      idCfgEstado: 7,
+      incidente: incidenteActualizado,
+    );
+
+    // 5. Enviar actualización al backend
+    await DemandaRecibidaService.actualizar(demandaActualizada);
+
+    // 6. Remover de la lista de incidentes activos y notificar
+    _incidentesActivos.removeAt(index);
+    _guardarMoviles();
+    notifyListeners();
   }
 }

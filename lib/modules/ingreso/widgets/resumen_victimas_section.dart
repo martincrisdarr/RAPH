@@ -154,10 +154,10 @@ class _ResumenVictimasSectionState extends State<ResumenVictimasSection> {
                   color: Colors.white60,
                 ),
               ),
-              if (victima.descripcion.trim().isNotEmpty) ...[
+              if (victima.observaciones.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
-                  victima.descripcion,
+                  victima.observaciones,
                   style: const TextStyle(
                     fontSize: 13,
                     fontStyle: FontStyle.italic,

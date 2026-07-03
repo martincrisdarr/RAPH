@@ -9,8 +9,9 @@ class Victima {
   final int? idIncidente;
   final DateTime? fechahoraSolicitaDespacho;
   final DateTime? fechahoraConfirmaDespacho;
-  final String? descripcion;
+  final String? observaciones;
   final String? idMovilAsignado;
+  final String? reporte;
 
   Victima({
     this.idVictima,
@@ -23,8 +24,9 @@ class Victima {
     this.idIncidente,
     this.fechahoraSolicitaDespacho,
     this.fechahoraConfirmaDespacho,
-    this.descripcion,
+    this.observaciones,
     this.idMovilAsignado,
+    this.reporte,
   });
 
   factory Victima.fromJson(Map<String, dynamic> json) {
@@ -43,8 +45,9 @@ class Victima {
       fechahoraConfirmaDespacho: json['fechahora_confirma_despacho'] != null
           ? DateTime.tryParse(json['fechahora_confirma_despacho'])
           : null,
-      descripcion: json['descripcion'],
+      observaciones: json['observaciones'],
       idMovilAsignado: json['id_movil_asignado'],
+      reporte: json['reporte'],
     );
   }
 
@@ -60,8 +63,9 @@ class Victima {
     if (idIncidente != null) map['idincidente'] = idIncidente;
     if (fechahoraSolicitaDespacho != null) map['fechahora_solicita_despacho'] = fechahoraSolicitaDespacho!.toIso8601String();
     if (fechahoraConfirmaDespacho != null) map['fechahora_confirma_despacho'] = fechahoraConfirmaDespacho!.toIso8601String();
-    if (descripcion != null) map['descripcion'] = descripcion;
+    if (observaciones != null) map['observaciones'] = observaciones;
     if (idMovilAsignado != null) map['id_movil_asignado'] = idMovilAsignado;
+    if (reporte != null) map['reporte'] = reporte;
     return map;
   }
 
@@ -76,8 +80,9 @@ class Victima {
     int? idIncidente,
     DateTime? fechahoraSolicitaDespacho,
     DateTime? fechahoraConfirmaDespacho,
-    String? descripcion,
+    String? observaciones,
     String? idMovilAsignado,
+    String? reporte,
     bool clearMovil = false,
   }) {
     return Victima(
@@ -91,8 +96,9 @@ class Victima {
       idIncidente: idIncidente ?? this.idIncidente,
       fechahoraSolicitaDespacho: fechahoraSolicitaDespacho ?? this.fechahoraSolicitaDespacho,
       fechahoraConfirmaDespacho: fechahoraConfirmaDespacho ?? this.fechahoraConfirmaDespacho,
-      descripcion: descripcion ?? this.descripcion,
+      observaciones: observaciones ?? this.observaciones,
       idMovilAsignado: clearMovil ? null : (idMovilAsignado ?? this.idMovilAsignado),
+      reporte: reporte ?? this.reporte,
     );
   }
 }
