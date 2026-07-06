@@ -7,7 +7,7 @@ class ListadosService {
       'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web';
 
   static const String _demandaRecibidaEndpoint =
-      '$_baseUrl/ser_sien_dsp_demanda_recibida?expand=estado,tipo_ingreso';
+      '$_baseUrl/ser_sien_dsp_demanda_recibida?expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
 
   static Map<String, String> _getHeaders() {
     final token = RaphAuthController.instance.token;
