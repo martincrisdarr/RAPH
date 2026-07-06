@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../shared/models/demanda_recibida.dart';
+import '../ingreso/controllers/ingreso_controller.dart';
 import 'widgets/kanban_column.dart';
 import 'widgets/kanban_card.dart';
 import 'widgets/filter_sidebar.dart';
@@ -9,7 +11,7 @@ class KanbanItem {
   final String title;
   final String subtitle;
   final String time;
-  final String priority;
+  final String? priority;
   final Color priorityColor;
   final List<MovilStatus> moviles;
   String status;
@@ -19,7 +21,7 @@ class KanbanItem {
     required this.title,
     required this.subtitle,
     required this.time,
-    required this.priority,
+    this.priority,
     required this.priorityColor,
     required this.moviles,
     required this.status,
@@ -27,7 +29,7 @@ class KanbanItem {
 }
 
 class ListadosPage extends StatefulWidget {
-  final VoidCallback? onNewIncidentTap;
+  final void Function(bool isNew)? onNewIncidentTap;
   const ListadosPage({super.key, this.onNewIncidentTap});
 
   @override
@@ -59,12 +61,65 @@ class _ListadosPageState extends State<ListadosPage> {
     debugPrint('🚀 INICIANDO LLAMADA GET: Cargando datos de Demandas...');
     setState(() => _isLoading = true);
     try {
-      final results = await Future.wait([
+      final resultados = await Future.wait([
         ListadosService.obtenerDemandasRecibidas(),
       ]);
 
+      final demandas = resultados[0];
       setState(() {
-        _rawDemandas = results[0];
+        _rawDemandas = demandas;
+        // Convert raw demands to KanbanItem objects
+        _items = demandas.map<KanbanItem>((map) {
+          String? priority = map['prioridad'];
+          Color priorityColor;
+          switch (priority?.toUpperCase()) {
+            case 'ROJO':
+              priorityColor = Colors.redAccent;
+              break;
+            case 'AMARILLO':
+              priorityColor = Colors.orangeAccent;
+              break;
+            case 'VERDE':
+              priorityColor = Colors.greenAccent;
+              break;
+            default:
+              priorityColor = Colors.grey;
+            }
+          // Moviles list conversion
+          List<MovilStatus> moviles = [];
+          if (map['moviles'] is List) {
+            moviles = (map['moviles'] as List).map<MovilStatus>((m) {
+              return MovilStatus(
+                nombre: m['nombre'] ?? 'Desconocido',
+                status: m['status'] ?? 'Desconocido',
+                lastStatusChange: m['lastStatusChange'] != null
+                    ? DateTime.parse(m['lastStatusChange'])
+                    : DateTime.now(),
+              );
+            }).toList();
+          }
+            // Extract nested incident and status info
+            final incident = map['incidente'];
+            final estado = map['estado'];
+            String title = incident != null && incident['descripcion'] != null && incident['descripcion'].toString().isNotEmpty
+                ? incident['descripcion']
+                : 'Sin descripción';
+            String subtitle = incident != null && incident['direccion'] != null ? incident['direccion'] : 'Sin dirección';
+            String time = incident != null && incident['fechahoraauto'] != null ? incident['fechahoraauto'] : '';
+            String rawStatus = estado != null && estado['descripcion'] != null ? estado['descripcion'] : 'Desconocido';
+            const allowedStatuses = ['Llamada recibida', 'En curso', 'Finalizado'];
+            String status = allowedStatuses.contains(rawStatus) ? rawStatus : 'Llamada recibida';
+            return KanbanItem(
+              id: map['iddemandarecibida']?.toString() ?? '',
+              title: title,
+              subtitle: subtitle,
+              time: time,
+              priority: priority,
+              priorityColor: priorityColor,
+              moviles: moviles,
+              status: status,
+            );
+        }).toList();
         _isLoading = false;
       });
       
@@ -75,149 +130,9 @@ class _ListadosPageState extends State<ListadosPage> {
     }
   }
 
-  final List<KanbanItem> _items = [
-    KanbanItem(
-      id: '1',
-      title: 'Accidente Vial',
-      subtitle: 'Ruta 22 y Av. Argentina',
-      time: 'Hace 5m',
-      priority: 'ROJO',
-      priorityColor: Colors.redAccent,
-      moviles: [
-        MovilStatus(nombre: 'Móvil 1', status: 'Llamada recibida'),
-        MovilStatus(nombre: 'Móvil 3', status: 'Llamada recibida'),
-        MovilStatus(nombre: 'Móvil 10', status: 'Llamada recibida'),
-      ],
-      status: 'Llamada recibida',
-    ),
-    KanbanItem(
-      id: '2',
-      title: 'Dolor Torácico',
-      subtitle: 'Calle Mitre 450',
-      time: 'Hace 12m',
-      priority: 'ROJO',
-      priorityColor: Colors.redAccent,
-      moviles: [MovilStatus(nombre: 'Móvil 3', status: 'Llamada recibida')],
-      status: 'Llamada recibida',
-    ),
-    KanbanItem(
-      id: '3',
-      title: 'Caída de Altura',
-      subtitle: 'Obra en construcción',
-      time: 'Hace 20m',
-      priority: 'AMARILLO',
-      priorityColor: Colors.orangeAccent,
-      moviles: [MovilStatus(nombre: 'Móvil 2', status: 'Llamada recibida')],
-      status: 'Llamada recibida',
-    ),
-    KanbanItem(
-      id: '4',
-      title: 'Asistencia Médica',
-      subtitle: 'B° Confluencia',
-      time: 'Hace 15m',
-      priority: 'VERDE',
-      priorityColor: Colors.greenAccent,
-      moviles: [
-        MovilStatus(
-          nombre: 'Móvil 5',
-          status: 'Despachado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 5)),
-        ),
-        MovilStatus(
-          nombre: 'Móvil 2',
-          status: 'En sitio',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 12)),
-        ),
-        MovilStatus(
-          nombre: 'Móvil 1',
-          status: 'Traslado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 25)),
-        ),
-        MovilStatus(
-          nombre: 'Móvil 7',
-          status: 'Arribado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 3)),
-        ),
-      ],
-      status: 'En curso',
-    ),
-    KanbanItem(
-      id: '5',
-      title: 'Convulsiones',
-      subtitle: 'Escuela N° 121',
-      time: 'Hace 8m',
-      priority: 'ROJO',
-      priorityColor: Colors.redAccent,
-      moviles: [
-        MovilStatus(
-          nombre: 'Móvil 1',
-          status: 'En sitio',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 18)),
-        )
-      ],
-      status: 'En curso',
-    ),
-    KanbanItem(
-      id: '6',
-      title: 'Traslado Programado',
-      subtitle: 'Hospital Provincial',
-      time: 'Hace 45m',
-      priority: 'AMARILLO',
-      priorityColor: Colors.orangeAccent,
-      moviles: [
-        MovilStatus(
-          nombre: 'Móvil 4',
-          status: 'Traslado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 32)),
-        ),
-        MovilStatus(
-          nombre: 'Móvil 6',
-          status: 'Despachado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 8)),
-        ),
-        MovilStatus(
-          nombre: 'Móvil 3',
-          status: 'En sitio',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 15)),
-        ),
-        MovilStatus(
-          nombre: 'Móvil 8',
-          status: 'Arribado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 4)),
-        ),
-      ],
-      status: 'En curso',
-    ),
-    KanbanItem(
-      id: '7',
-      title: 'Emergencia Respiratoria',
-      subtitle: 'B° San Lorenzo',
-      time: 'Hace 30m',
-      priority: 'ROJO',
-      priorityColor: Colors.redAccent,
-      moviles: [
-        MovilStatus(
-          nombre: 'Móvil 2',
-          status: 'Arribado',
-          lastStatusChange: DateTime.now().subtract(const Duration(minutes: 21)),
-        )
-      ],
-      status: 'En curso',
-    ),
-    KanbanItem(
-      id: '8',
-      title: 'Control de Signos',
-      subtitle: 'Centro Cívico',
-      time: 'Hace 1h',
-      priority: 'VERDE',
-      priorityColor: Colors.greenAccent,
-      moviles: [
-        MovilStatus(nombre: 'Móvil 6', status: 'Finalizado'),
-        MovilStatus(nombre: 'Móvil 9', status: 'Finalizado'),
-      ],
-      status: 'Finalizado',
-    ),
-  ];
+  List<KanbanItem> _items = [];
+
+        
 
   void _onItemDropped(String itemTitle, String newStatus) {
     setState(() {
@@ -328,7 +243,7 @@ class _ListadosPageState extends State<ListadosPage> {
                     Row(
                       children: [
                         ElevatedButton.icon(
-                          onPressed: widget.onNewIncidentTap,
+                          onPressed: widget.onNewIncidentTap != null ? () => widget.onNewIncidentTap!(true) : null,
                           icon: const Icon(Icons.add_box_rounded),
                           label: const Text('NUEVO INCIDENTE'),
                           style: ElevatedButton.styleFrom(
@@ -422,15 +337,34 @@ class _ListadosPageState extends State<ListadosPage> {
         count: columnItems.length,
         isGrid: isEnCurso,
         onAccept: (itemTitle) => _onItemDropped(itemTitle, dropStatus),
-        children: columnItems.map((item) => KanbanCard(
-          title: item.title,
-          subtitle: item.subtitle,
-          time: item.time,
-          moviles: item.moviles,
-          globalStatus: item.status,
-          priority: item.priority,
-          priorityColor: item.priorityColor,
-        )).toList(),
+        children: columnItems.map((item) {
+          // Buscar el raw map de esta demanda por id
+          final rawMap = _rawDemandas.firstWhere(
+            (m) => m['iddemandarecibida']?.toString() == item.id,
+            orElse: () => <String, dynamic>{},
+          );
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                if (rawMap.isNotEmpty) {
+                  final demanda = DemandaRecibida.fromJson(rawMap);
+                  IngresoController().cargarDemanda(demanda);
+                }
+                widget.onNewIncidentTap?.call(false);
+              },
+              child: KanbanCard(
+                title: item.title,
+                subtitle: item.subtitle,
+                time: item.time,
+                moviles: item.moviles,
+                globalStatus: item.status,
+                priority: item.priority,
+                priorityColor: item.priorityColor,
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

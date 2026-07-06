@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../shared/components/app_sidebar.dart';
 import '../modules/ingreso/ingreso_page.dart';
+import '../modules/ingreso/controllers/ingreso_controller.dart';
 import '../modules/listados/listados_page.dart';
 import '../modules/despacho/despacho_page.dart';
 import '../modules/configuraciones/configuraciones_page.dart';
@@ -17,7 +18,14 @@ class _MainLayoutState extends State<MainLayout> {
 
   List<Widget> get _pages => [
     const IngresoPage(),
-    ListadosPage(onNewIncidentTap: () => _onMenuSelected(0)),
+    ListadosPage(
+      onNewIncidentTap: (isNew) async {
+        if (isNew) {
+          await IngresoController().limpiarBorrador();
+        }
+        _onMenuSelected(0);
+      },
+    ),
     const DespachoPage(),
     const ConfiguracionesPage(),
   ];

@@ -17,10 +17,13 @@ class KanbanCard extends StatefulWidget {
   final String title;
   final String subtitle;
   final String time;
-  final String priority;
+  final String? priority;
   final Color priorityColor;
   final List<MovilStatus> moviles;
   final String globalStatus;
+
+  final String? description;
+  final String? address;
 
   const KanbanCard({
     super.key,
@@ -29,8 +32,10 @@ class KanbanCard extends StatefulWidget {
     required this.time,
     required this.moviles,
     required this.globalStatus,
-    this.priority = 'Media',
+    this.priority,
     this.priorityColor = Colors.orange,
+    this.description,
+    this.address,
   });
 
   @override
@@ -96,39 +101,40 @@ class _KanbanCardState extends State<KanbanCard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: widget.priorityColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: widget.priorityColor.withOpacity(0.4), width: 1),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: widget.priorityColor,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(color: widget.priorityColor.withOpacity(0.5), blurRadius: 4),
-                            ],
+                  if (widget.priority != null && widget.priority!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: widget.priorityColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: widget.priorityColor.withOpacity(0.4), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: widget.priorityColor,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(color: widget.priorityColor.withOpacity(0.5), blurRadius: 4),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          widget.priority,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: widget.priorityColor,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                          const SizedBox(width: 8),
+                          Text(
+                            widget.priority!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: widget.priorityColor,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                   if (widget.globalStatus != 'Llamada recibida')
                     Text(
                       widget.time,
