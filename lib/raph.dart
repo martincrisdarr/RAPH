@@ -33,6 +33,11 @@ export 'shared/components/layout/app_topbar.dart';
 export 'shared/components/layout/app_sidebar.dart';
 export 'shared/components/layout/app_scaffold.dart';
 
+// Sockets / Edición Colaborativa
+export 'shared/services/socket_service.dart';
+export 'shared/services/socket_events.dart';
+export 'shared/components/collab_text_field.dart';
+
 /// Pantalla principal de la librería RAPH.
 /// Usar como [home] o ruta en la aplicación host (example u otra app).
 class RaphScreen extends StatefulWidget {

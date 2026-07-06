@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../config/auth_controller.dart';
 
 class ListadosService {
   static const String _baseUrl =
@@ -8,9 +9,21 @@ class ListadosService {
   static const String _demandaRecibidaEndpoint =
       '$_baseUrl/ser_sien_dsp_demanda_recibida?expand=estado,tipo_ingreso';
 
+  static Map<String, String> _getHeaders() {
+    final token = RaphAuthController.instance.token;
+    final headers = {'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
   static Future<List<Map<String, dynamic>>> obtenerDemandasRecibidas() async {
     try {
-      final response = await http.get(Uri.parse(_demandaRecibidaEndpoint));
+      final response = await http.get(
+        Uri.parse(_demandaRecibidaEndpoint),
+        headers: _getHeaders(),
+      );
 
       if (response.statusCode != 200) {
         throw Exception('Error al cargar demandas recibidas: ${response.statusCode}');
