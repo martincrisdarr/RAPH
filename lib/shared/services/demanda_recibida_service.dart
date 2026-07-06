@@ -76,13 +76,13 @@ class DemandaRecibidaService {
   static Future<List<DemandaRecibida>> obtenerRecientes({DateTime? fecha, String? direccion}) async {
     try {
       // Endpoint específico para incidentes recientes
-      final baseIncidenteUrl = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_incidente/recientes';
+      final baseIncidenteUrl = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_incidente/recientes?expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
       var urlStr = baseIncidenteUrl;
       
-      bool hasQuery = false;
+      bool hasQuery = true;
       int filterIndex = 0;
       if (direccion != null && direccion.isNotEmpty) {
-        urlStr += '?filter%5Bdireccion%5D%5Blike%5D=${Uri.encodeComponent(direccion)}';
+        urlStr += '&filter%5Bdireccion%5D%5Blike%5D=${Uri.encodeComponent(direccion)}';
         filterIndex++;
         hasQuery = true;
       }
