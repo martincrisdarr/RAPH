@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +8,7 @@ import '../../../shared/models/victima_data.dart';
 import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
+import '../../../shared/services/socket_service.dart';
 
 class DatosVictimasSection extends StatefulWidget {
   final VoidCallback? onDespacho;
@@ -20,13 +22,42 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
   final _ingresoController = IngresoController();
   late TabController _victimasTabController;
   int _lastVictimasCount = 0;
+  Timer? _unlockVictimaDebounce;
 
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvailable = false;
   bool _isListening = false;
   int? _listeningVictimaIndex;
   String _textBeforeListening = '';
+
+  Map<String, TextEditingController>? _dniControllers;
+  Map<String, TextEditingController>? _nombreControllers;
+  Map<String, TextEditingController>? _edadControllers;
   Map<String, TextEditingController>? _observacionesControllers;
+
+  TextEditingController _getDniController(VictimaData victima) {
+    _dniControllers ??= {};
+    return _dniControllers!.putIfAbsent(
+      victima.id,
+      () => TextEditingController(text: victima.dni),
+    );
+  }
+
+  TextEditingController _getNombreController(VictimaData victima) {
+    _nombreControllers ??= {};
+    return _nombreControllers!.putIfAbsent(
+      victima.id,
+      () => TextEditingController(text: victima.nombre),
+    );
+  }
+
+  TextEditingController _getEdadController(VictimaData victima) {
+    _edadControllers ??= {};
+    return _edadControllers!.putIfAbsent(
+      victima.id,
+      () => TextEditingController(text: victima.edad),
+    );
+  }
 
   TextEditingController _getObservacionesController(VictimaData victima) {
     _observacionesControllers ??= {};
@@ -73,15 +104,40 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   void _onControllerUpdate() {
     if (mounted) {
-      // Sincronizar controladores de observaciones con los datos del modelo
-      if (_observacionesControllers != null) {
-        for (var victima in _ingresoController.victimas) {
+      // Sincronizar controladores con los datos del modelo
+      for (var victima in _ingresoController.victimas) {
+        if (_dniControllers != null) {
+          final controller = _dniControllers![victima.id];
+          if (controller != null && controller.text != victima.dni) {
+            controller.text = victima.dni;
+          }
+        }
+        if (_nombreControllers != null) {
+          final controller = _nombreControllers![victima.id];
+          if (controller != null && controller.text != victima.nombre) {
+            controller.text = victima.nombre;
+          }
+        }
+        if (_edadControllers != null) {
+          final controller = _edadControllers![victima.id];
+          if (controller != null && controller.text != victima.edad) {
+            controller.text = victima.edad;
+          }
+        }
+        if (_observacionesControllers != null) {
           final controller = _observacionesControllers![victima.id];
           if (controller != null && controller.text != victima.observaciones) {
             controller.text = victima.observaciones;
           }
         }
       }
+
+      // Limpiar controladores huérfanos
+      final activeIds = _ingresoController.victimas.map((v) => v.id).toSet();
+      _dniControllers?.removeWhere((id, _) => !activeIds.contains(id));
+      _nombreControllers?.removeWhere((id, _) => !activeIds.contains(id));
+      _edadControllers?.removeWhere((id, _) => !activeIds.contains(id));
+      _observacionesControllers?.removeWhere((id, _) => !activeIds.contains(id));
 
       if (_ingresoController.victimas.length != _lastVictimasCount) {
         _lastVictimasCount = _ingresoController.victimas.length;
@@ -202,8 +258,24 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   @override
   void dispose() {
+    _unlockVictimaDebounce?.cancel();
     _ingresoController.removeListener(_onControllerUpdate);
     _victimasTabController.dispose();
+    if (_dniControllers != null) {
+      for (var controller in _dniControllers!.values) {
+        controller.dispose();
+      }
+    }
+    if (_nombreControllers != null) {
+      for (var controller in _nombreControllers!.values) {
+        controller.dispose();
+      }
+    }
+    if (_edadControllers != null) {
+      for (var controller in _edadControllers!.values) {
+        controller.dispose();
+      }
+    }
     if (_observacionesControllers != null) {
       for (var controller in _observacionesControllers!.values) {
         controller.dispose();
@@ -218,281 +290,355 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
     final theme = Theme.of(context);
     final victimas = _ingresoController.victimas;
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.white10)),
-          ),
-          child: Row(
-            children: [
-              Flexible(
-                child: IntrinsicWidth(
-                  child: TabBar(
-                    controller: _victimasTabController,
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    indicatorColor: theme.colorScheme.primary,
-                    labelColor: theme.colorScheme.primary,
-                    unselectedLabelColor: Colors.white60,
-                    dividerColor: Colors.transparent,
-                    tabs: victimas.asMap().entries.map((e) {
-                      final victima = e.value;
-                      final nombre = victima.nombre.trim();
-                      String tabLabel = 'Víctima ${e.key + 1}';
+    return ValueListenableBuilder<Map<String, dynamic>>(
+      valueListenable: SocketService().lockedFields,
+      builder: (context, locks, child) {
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.white10)),
+              ),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: IntrinsicWidth(
+                      child: TabBar(
+                        controller: _victimasTabController,
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
+                        indicatorColor: theme.colorScheme.primary,
+                        labelColor: theme.colorScheme.primary,
+                        unselectedLabelColor: Colors.white60,
+                        dividerColor: Colors.transparent,
+                        tabs: victimas.asMap().entries.map((e) {
+                          final victima = e.value;
+                          final nombre = victima.nombre.trim();
+                          String tabLabel = 'Víctima ${e.key + 1}';
 
-                      if (nombre.isNotEmpty) {
-                        tabLabel = nombre.split(' ').first;
-                        if (tabLabel.length > 10) tabLabel = '${tabLabel.substring(0, 8)}..';
-                      }
+                          if (nombre.isNotEmpty) {
+                            tabLabel = nombre.split(' ').first;
+                            if (tabLabel.length > 10) tabLabel = '${tabLabel.substring(0, 8)}..';
+                          }
 
-                      return Tab(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(tabLabel),
-                            if (victimas.length > 1) ...[
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () => _ingresoController.removeVictima(e.key),
-                                child: const Icon(Icons.close, size: 14),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add, color: Colors.white),
-                onPressed: () => _ingresoController.addVictima(),
-                tooltip: 'Agregar víctima',
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _victimasTabController,
-            children: victimas.asMap().entries.map((e) => _buildVictimaForm(theme, e.key, e.value)).toList(),
-          ),
-        ),
-        if (widget.onDespacho != null) ...[
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: widget.onDespacho,
-                icon: const Icon(Icons.local_shipping_rounded),
-                label: const Text('DESPACHO RÁPIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary.withOpacity(0.15),
-                  foregroundColor: theme.colorScheme.primary,
-                  side: BorderSide(color: theme.colorScheme.primary, width: 1.0),
-                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+                          final bool isTabLocked = locks.containsKey('victima_${e.key}');
 
-  Widget _buildVictimaForm(ThemeData theme, int index, VictimaData victima) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: TextFormField(
-                  initialValue: victima.dni,
-                  decoration: const InputDecoration(labelText: 'DNI'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: (val) => _ingresoController.updateVictima(index, dni: val),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 1,
-                child: TextFormField(
-                  initialValue: victima.nombre,
-                  decoration: const InputDecoration(labelText: 'Nombre y apellido'),
-                  onChanged: (val) => _ingresoController.updateVictima(index, nombre: val),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: TextFormField(
-                  initialValue: victima.edad,
-                  decoration: const InputDecoration(labelText: 'Edad'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: (val) => _ingresoController.updateVictima(index, edad: val),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 1,
-                child: CustomSelect<Configuracion>(
-                  label: 'Género',
-                  fetchItems: () => ConfiguracionService.obtenerGeneros(),
-                  itemLabel: (item) => item.descripcion,
-                  initialSelectionId: victima.idConfGenero,
-                  matchById: (item) => item.idconfiguracion,
-                  onSelected: (val) {
-                    if (val != null) {
-                      _ingresoController.updateVictima(index, idConfGenero: val.idconfiguracion);
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _getObservacionesController(victima),
-            decoration: InputDecoration(
-              labelText: 'Observaciones',
-              suffixIcon: Padding(
-                padding: const EdgeInsets.only(top: 8.0, right: 8.0),
-                child: Align(
-                  alignment: Alignment.topRight,
-                  widthFactor: 1.0,
-                  heightFactor: 1.0,
-                  child: Tooltip(
-                    message: (_isListening && _listeningVictimaIndex == index)
-                        ? 'Detener dictado por voz'
-                        : 'Dictar por voz',
-                    child: Material(
-                      color: (_isListening && _listeningVictimaIndex == index)
-                          ? Colors.red.withOpacity(0.2)
-                          : Colors.transparent,
-                      type: MaterialType.circle,
-                      clipBehavior: Clip.antiAlias,
-                      child: IconButton(
-                        icon: Icon(
-                          (_isListening && _listeningVictimaIndex == index)
-                              ? Icons.mic
-                              : Icons.mic_none,
-                          color: (_isListening && _listeningVictimaIndex == index)
-                              ? Colors.redAccent
-                              : Colors.white70,
-                        ),
-                        onPressed: () => _toggleListening(index, victima),
+                          return Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(tabLabel),
+                                if (isTabLocked) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.lock, size: 10, color: Colors.redAccent),
+                                ],
+                                if (victimas.length > 1 && !isTabLocked) ...[
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => _ingresoController.removeVictima(e.key),
+                                    child: const Icon(Icons.close, size: 14),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ),
                   ),
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    onPressed: () => _ingresoController.addVictima(),
+                    tooltip: 'Agregar víctima',
+                  ),
+                ],
               ),
             ),
-            maxLines: 2,
-            onChanged: (val) => _ingresoController.updateVictima(index, observaciones: val),
-          ),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 12),
-          
-          // Triage section
-          _buildTriageBanner(theme, index, victima),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 12),
-
-          // Symptoms & Suggested assistance section
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 1,
-                child: _buildBuscadorEtiquetasColumn(theme, index, victima),
+            Expanded(
+              child: TabBarView(
+                controller: _victimasTabController,
+                children: victimas.asMap().entries.map((e) => _buildVictimaForm(theme, e.key, e.value, locks)).toList(),
               ),
-              const SizedBox(width: 20),
-              Expanded(
-                flex: 1,
-                child: _buildPreguntasRecomendacionesBox(theme, victima),
+            ),
+            if (widget.onDespacho != null) ...[
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: widget.onDespacho,
+                    icon: const Icon(Icons.local_shipping_rounded),
+                    label: const Text('DESPACHO RÁPIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary.withOpacity(0.15),
+                      foregroundColor: theme.colorScheme.primary,
+                      side: BorderSide(color: theme.colorScheme.primary, width: 1.0),
+                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
               ),
             ],
-          ),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 12),
+          ],
+        );
+      },
+    );
+  }
 
-          // Attachments section
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                FilePickerResult? result = await FilePicker.platform.pickFiles(
-                  allowMultiple: true,
-                  type: FileType.custom,
-                  allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
-                );
+  Widget _buildVictimaForm(ThemeData theme, int index, VictimaData victima, Map<String, dynamic> locks) {
+    final bool isCollaborative = _ingresoController.incidenteActual.idIncidente != null;
+    final bool isLocked = isCollaborative && locks.containsKey('victima_$index');
+    String lockedByName = "";
 
-                if (result != null) {
-                  setState(() {
-                    victima.archivosAdjuntos.addAll(result.files);
-                  });
-                }
-              },
-              icon: const Icon(Icons.attach_file, size: 20),
-              label: const Text(
-                'Adjuntar documentación',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                foregroundColor: theme.colorScheme.primary,
-                side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+    if (isLocked) {
+      lockedByName = locks['victima_$index']['nombre'] ?? 'Otro usuario';
+    }
+
+    return Focus(
+      onFocusChange: (hasFocus) {
+        if (!isCollaborative) return;
+        if (isLocked) return;
+        if (hasFocus) {
+          _unlockVictimaDebounce?.cancel();
+          SocketService().lockField('victima_$index');
+        } else {
+          _unlockVictimaDebounce?.cancel();
+          _unlockVictimaDebounce = Timer(const Duration(milliseconds: 150), () {
+            if (mounted) {
+              SocketService().unlockField('victima_$index');
+            }
+          });
+        }
+      },
+      child: Stack(
+        children: [
+          AbsorbPointer(
+            absorbing: isLocked,
+            child: Opacity(
+              opacity: isLocked ? 0.6 : 1.0,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (isLocked) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.lock, color: Colors.redAccent, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Víctima bloqueada. $lockedByName está editando a esta persona.',
+                                style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: TextFormField(
+                            controller: _getDniController(victima),
+                            decoration: const InputDecoration(labelText: 'DNI'),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            onChanged: (val) => _ingresoController.updateVictima(index, dni: val),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 1,
+                          child: TextFormField(
+                            controller: _getNombreController(victima),
+                            decoration: const InputDecoration(labelText: 'Nombre y apellido'),
+                            onChanged: (val) => _ingresoController.updateVictima(index, nombre: val),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: TextFormField(
+                            controller: _getEdadController(victima),
+                            decoration: const InputDecoration(labelText: 'Edad'),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            onChanged: (val) => _ingresoController.updateVictima(index, edad: val),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 1,
+                          child: CustomSelect<Configuracion>(
+                            enabled: !isLocked,
+                            label: 'Género',
+                            fetchItems: () => ConfiguracionService.obtenerGeneros(),
+                            itemLabel: (item) => item.descripcion,
+                            initialSelectionId: victima.idConfGenero,
+                            matchById: (item) => item.idconfiguracion,
+                            onSelected: (val) {
+                              if (val != null) {
+                                _ingresoController.updateVictima(index, idConfGenero: val.idconfiguracion);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _getObservacionesController(victima),
+                      decoration: InputDecoration(
+                        labelText: 'Observaciones',
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+                          child: Align(
+                            alignment: Alignment.topRight,
+                            widthFactor: 1.0,
+                            heightFactor: 1.0,
+                            child: Tooltip(
+                              message: (_isListening && _listeningVictimaIndex == index)
+                                  ? 'Detener dictado por voz'
+                                  : 'Dictar por voz',
+                              child: Material(
+                                color: (_isListening && _listeningVictimaIndex == index)
+                                    ? Colors.red.withOpacity(0.2)
+                                    : Colors.transparent,
+                                type: MaterialType.circle,
+                                clipBehavior: Clip.antiAlias,
+                                child: IconButton(
+                                  icon: Icon(
+                                    (_isListening && _listeningVictimaIndex == index)
+                                        ? Icons.mic
+                                        : Icons.mic_none,
+                                    color: (_isListening && _listeningVictimaIndex == index)
+                                        ? Colors.redAccent
+                                        : Colors.white70,
+                                  ),
+                                  onPressed: () => _toggleListening(index, victima),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      maxLines: 2,
+                      onChanged: (val) => _ingresoController.updateVictima(index, observaciones: val),
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 12),
+                    
+                    // Triage section
+                    _buildTriageBanner(theme, index, victima),
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 12),
+ 
+                    // Symptoms & Suggested assistance section
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: _buildBuscadorEtiquetasColumn(theme, index, victima),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          flex: 1,
+                          child: _buildPreguntasRecomendacionesBox(theme, victima),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 12),
+ 
+                    // Attachments section
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          FilePickerResult? result = await FilePicker.platform.pickFiles(
+                            allowMultiple: true,
+                            type: FileType.custom,
+                            allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
+                          );
+ 
+                          if (result != null) {
+                            setState(() {
+                              victima.archivosAdjuntos.addAll(result.files);
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.attach_file, size: 20),
+                        label: const Text(
+                          'Adjuntar documentación',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          foregroundColor: theme.colorScheme.primary,
+                          side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (victima.archivosAdjuntos.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: victima.archivosAdjuntos.map((file) {
+                            return Chip(
+                              label: Text(
+                                file.name,
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setState(() {
+                                  victima.archivosAdjuntos.remove(file);
+                                });
+                              },
+                              backgroundColor: theme.colorScheme.surface,
+                              side: const BorderSide(color: Colors.white24),
+                            );
+                          }).toList().cast<Widget>(),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
           ),
-          if (victima.archivosAdjuntos.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: victima.archivosAdjuntos.map((file) {
-                  return Chip(
-                    label: Text(
-                      file.name,
-                      style: const TextStyle(fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    deleteIcon: const Icon(Icons.close, size: 16),
-                    onDeleted: () {
-                      setState(() {
-                        victima.archivosAdjuntos.remove(file);
-                      });
-                    },
-                    backgroundColor: theme.colorScheme.surface,
-                    side: const BorderSide(color: Colors.white24),
-                  );
-                }).toList().cast<Widget>(),
-              ),
-            ),
-          ],
         ],
       ),
     );

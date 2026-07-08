@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../modules/ingreso/controllers/ingreso_controller.dart';
+import '../services/socket_service.dart';
 
 class SidebarItem {
   final IconData icon;
@@ -162,6 +163,23 @@ class AppSidebar extends StatelessWidget {
                 },
               ),
             ),
+          ),
+          // Socket Connection Status Indicator
+          ValueListenableBuilder<bool>(
+            valueListenable: SocketService().isConnected,
+            builder: (context, connected, child) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: HoverRightTooltip(
+                  message: connected ? 'Sockets Conectados' : 'Sockets Desconectados',
+                  child: Icon(
+                    connected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                    color: connected ? Colors.greenAccent : Colors.redAccent,
+                    size: 22,
+                  ),
+                ),
+              );
+            },
           ),
           // User Info (Avatar Only)
           const Divider(height: 1, color: Colors.white10),

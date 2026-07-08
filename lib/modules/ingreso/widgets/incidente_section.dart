@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../controllers/ingreso_controller.dart';
+import '../../../shared/components/collab_text_field.dart';
+import '../../../shared/services/socket_service.dart';
 
 class IncidenteSection extends StatefulWidget {
   final VoidCallback? onDespacho;
@@ -116,6 +118,8 @@ class _IncidenteSectionState extends State<IncidenteSection> {
               _descripcionIncidenteController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _descripcionIncidenteController.text.length),
               );
+              // Sincronizar con el socket en tiempo real
+              SocketService().updateField('descripcion', _descripcionIncidenteController.text);
               // Sincronizar con el controller
               _ingresoController.updateIncidente(descripcion: _descripcionIncidenteController.text);
             }
@@ -190,48 +194,33 @@ class _IncidenteSectionState extends State<IncidenteSection> {
           const SizedBox(height: 16),
           _buildTriageBanner(theme),
           const SizedBox(height: 16),
-          Expanded(
-            child: TextFormField(
+           Expanded(
+            child: CollabTextField(
+              fieldId: 'descripcion',
+              label: 'Descripción del incidente',
+              hintText: 'Ingresá los detalles del incidente...',
               controller: _descripcionIncidenteController,
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
+              isCollaborative: _ingresoController.incidenteActual.idIncidente != null,
+              maxLines: 12,
               onChanged: (val) => _ingresoController.updateIncidente(descripcion: val),
-              decoration: InputDecoration(
-                labelText: 'Descripción del incidente',
-                alignLabelWithHint: true,
-                hintText: 'Ingresá los detalles del incidente...',
-                hintStyle: const TextStyle(color: Colors.white24),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.02),
-                contentPadding: const EdgeInsets.all(16),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white12, width: 1.5),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
-                ),
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.only(top: 8.0, right: 8.0),
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    widthFactor: 1.0,
-                    heightFactor: 1.0,
-                    child: Tooltip(
-                      message: _isListening ? 'Detener dictado por voz' : 'Dictar por voz',
-                      child: Material(
-                        color: _isListening ? Colors.red.withValues(alpha: 0.2) : Colors.transparent,
-                        type: MaterialType.circle,
-                        clipBehavior: Clip.antiAlias,
-                        child: IconButton(
-                          icon: Icon(
-                            _isListening ? Icons.mic : Icons.mic_none,
-                            color: _isListening ? Colors.redAccent : Colors.white70,
-                          ),
-                          onPressed: _toggleListening,
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  widthFactor: 1.0,
+                  heightFactor: 1.0,
+                  child: Tooltip(
+                    message: _isListening ? 'Detener dictado por voz' : 'Dictar por voz',
+                    child: Material(
+                      color: _isListening ? Colors.red.withValues(alpha: 0.2) : Colors.transparent,
+                      type: MaterialType.circle,
+                      clipBehavior: Clip.antiAlias,
+                      child: IconButton(
+                        icon: Icon(
+                          _isListening ? Icons.mic : Icons.mic_none,
+                          color: _isListening ? Colors.redAccent : Colors.white70,
                         ),
+                        onPressed: _toggleListening,
                       ),
                     ),
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme_tokens.dart';
+import '../../services/socket_service.dart';
 import 'app_sidebar.dart';
 
 /// Barra superior de la aplicación (topbar) desacoplada del contenido central.
@@ -107,6 +108,30 @@ class AppTopbar extends StatelessWidget implements PreferredSizeWidget {
                                   letterSpacing: 1.2,
                                   fontSize: 14,
                                 ),
+                              ),
+                              const SizedBox(width: 8),
+                              ValueListenableBuilder<bool>(
+                                valueListenable: SocketService().isConnected,
+                                builder: (context, connected, child) {
+                                  return Tooltip(
+                                    message: connected ? 'Sockets Conectados' : 'Sockets Desconectados',
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: connected ? Colors.greenAccent : Colors.redAccent,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: (connected ? Colors.greenAccent : Colors.redAccent).withOpacity(0.5),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                               const SizedBox(width: 12),
                               Expanded(
