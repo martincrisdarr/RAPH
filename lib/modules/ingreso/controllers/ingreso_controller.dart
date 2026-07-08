@@ -9,6 +9,7 @@ import '../../../shared/services/incidente_service.dart';
 import '../../../shared/models/victima_data.dart';
 import '../../../shared/services/victima_service.dart';
 import '../../../shared/models/victima.dart';
+import '../../../shared/services/socket_service.dart';
 
 class IngresoController extends ChangeNotifier {
   static final IngresoController _instance = IngresoController._internal();
@@ -30,6 +31,94 @@ class IngresoController extends ChangeNotifier {
   Timer? _debounceIncidenteTimer;
   static const String _draftKey = 'demanda_draft';
   static const String _incidenteDraftKey = 'incidente_draft';
+
+  int? _lastJoinedIncidenteId;
+  final Map<String, void Function(String)> _registeredCallbacks = {};
+  void Function(String)? _actionCallback;
+
+  void _sincronizarSocketRoom() {
+    final currentId = _incidenteActual.idIncidente;
+    if (currentId != _lastJoinedIncidenteId) {
+      _lastJoinedIncidenteId = currentId;
+      if (currentId != null) {
+        SocketService().joinRecord('incidente', currentId);
+        _registrarOyentesSocketVictimas();
+      } else {
+        _limpiarOyentesSocketVictimas();
+      }
+    }
+  }
+
+  void _registrarOyenteEspecifico(String fieldId, void Function(String) callback) {
+    if (_registeredCallbacks.containsKey(fieldId)) {
+      SocketService().unregisterFieldListener(fieldId, _registeredCallbacks[fieldId]!);
+    }
+    _registeredCallbacks[fieldId] = callback;
+    SocketService().registerFieldListener(fieldId, callback);
+  }
+
+  void _limpiarOyentesSocketVictimas() {
+    _registeredCallbacks.forEach((fieldId, callback) {
+      SocketService().unregisterFieldListener(fieldId, callback);
+    });
+    _registeredCallbacks.clear();
+    
+    if (_actionCallback != null) {
+      SocketService().unregisterFieldListener('victimas_action', _actionCallback!);
+      _actionCallback = null;
+    }
+  }
+
+  void _registrarOyentesSocketVictimas() {
+    _limpiarOyentesSocketVictimas();
+    
+    // Escuchar acciones estructurales (agregar/eliminar víctimas)
+    _actionCallback = (val) {
+      if (val == 'add') {
+        addVictima(emitirSocket: false);
+      } else if (val.startsWith('remove:')) {
+        final parts = val.split(':');
+        if (parts.length > 1) {
+          final index = int.tryParse(parts[1]);
+          if (index != null) {
+            removeVictima(index, emitirSocket: false);
+          }
+        }
+      }
+    };
+    SocketService().registerFieldListener('victimas_action', _actionCallback!);
+
+    // Registrar oyentes para cada víctima actual
+    for (int i = 0; i < _victimas.length; i++) {
+      _registrarOyentesParaVictimaIndex(i);
+    }
+  }
+
+  void _registrarOyentesParaVictimaIndex(int index) {
+    _registrarOyenteEspecifico('victima_${index}_nombre', (val) {
+      updateVictima(index, nombre: val, emitirSocket: false);
+    });
+    _registrarOyenteEspecifico('victima_${index}_dni', (val) {
+      updateVictima(index, dni: val, emitirSocket: false);
+    });
+    _registrarOyenteEspecifico('victima_${index}_edad', (val) {
+      updateVictima(index, edad: val, emitirSocket: false);
+    });
+    _registrarOyenteEspecifico('victima_${index}_observaciones', (val) {
+      updateVictima(index, observaciones: val, emitirSocket: false);
+    });
+    _registrarOyenteEspecifico('victima_${index}_genero', (val) {
+      final id = int.tryParse(val);
+      updateVictima(index, idConfGenero: id, emitirSocket: false);
+    });
+    _registrarOyenteEspecifico('victima_${index}_triage', (val) {
+      updateVictima(index, codigoTriage: val, emitirSocket: false);
+    });
+    _registrarOyenteEspecifico('victima_${index}_sintomas', (val) {
+      final sintomasList = val.isEmpty ? <String>[] : val.split(',');
+      updateVictima(index, sintomas: sintomasList, emitirSocket: false);
+    });
+  }
 
   List<DemandaRecibida> _incidentesRecientes = [];
   List<DemandaRecibida> get incidentesRecientes => _incidentesRecientes;
@@ -72,6 +161,7 @@ class IngresoController extends ChangeNotifier {
       try {
         final decoded = jsonDecode(incDraftJson);
         _incidenteActual = Incidente.fromJson(decoded);
+        _sincronizarSocketRoom();
       } catch (e) {
         print('Error al cargar borrador de incidente: $e');
       }
@@ -101,6 +191,7 @@ class IngresoController extends ChangeNotifier {
     _selectedVictimaIndex = 0;
     _llamadasDelIncidente = [];
     _tieneBorrador = false;
+    _sincronizarSocketRoom();
     notifyListeners();
   }
 
@@ -129,6 +220,7 @@ class IngresoController extends ChangeNotifier {
     _selectedVictimaIndex = 0;
     _llamadasDelIncidente = [];
 
+    _sincronizarSocketRoom();
     await _guardarBorrador();
     notifyListeners();
   }
@@ -176,6 +268,7 @@ class IngresoController extends ChangeNotifier {
       codigoTriage: codigoTriage,
     );
 
+    _sincronizarSocketRoom();
     _guardarBorrador();
     notifyListeners();
     // Si viene descripcion, también programar sync del incidente
@@ -234,6 +327,7 @@ class IngresoController extends ChangeNotifier {
       final creado = await IncidenteService.crear(_incidenteActual);
       if (creado != null && creado.idIncidente != null) {
         _incidenteActual = _incidenteActual.copyWith(idIncidente: creado.idIncidente);
+        _sincronizarSocketRoom();
         // Vinculamos el incidente con la demanda
         _demandaActual = _demandaActual.copyWith(idIncidente: creado.idIncidente);
         await _guardarBorrador();
@@ -243,6 +337,7 @@ class IngresoController extends ChangeNotifier {
       }
     } else {
       await IncidenteService.actualizar(_incidenteActual);
+      _sincronizarSocketRoom();
       if (_demandaActual.idIncidente != _incidenteActual.idIncidente) {
         _demandaActual = _demandaActual.copyWith(idIncidente: _incidenteActual.idIncidente);
         _programarGuardadoRemoto();
@@ -262,17 +357,25 @@ class IngresoController extends ChangeNotifier {
     }
   }
 
-  void addVictima() {
+  void addVictima({bool emitirSocket = true}) {
     _victimas.add(VictimaData());
     _selectedVictimaIndex = _victimas.length - 1;
+    _registrarOyentesParaVictimaIndex(_selectedVictimaIndex);
+    if (emitirSocket) {
+      SocketService().updateField('victimas_action', 'add');
+    }
     notifyListeners();
   }
 
-  void removeVictima(int index) {
+  void removeVictima(int index, {bool emitirSocket = true}) {
     if (_victimas.length > 1) {
       _victimas.removeAt(index);
       if (_selectedVictimaIndex >= _victimas.length) {
         _selectedVictimaIndex = _victimas.length - 1;
+      }
+      _registrarOyentesSocketVictimas();
+      if (emitirSocket) {
+        SocketService().updateField('victimas_action', 'remove:$index');
       }
       notifyListeners();
     }
@@ -288,6 +391,7 @@ class IngresoController extends ChangeNotifier {
     String? codigoTriage,
     List<String>? sintomas,
     String? observaciones,
+    bool emitirSocket = true,
   }) {
     if (index >= 0 && index < _victimas.length) {
       final v = _victimas[index];
@@ -295,18 +399,53 @@ class IngresoController extends ChangeNotifier {
 
       if (nombre != null) {
         v.nombre = nombre;
-        shouldNotifyImmediately = false;
-        _uiNameDebounce?.cancel();
-        _uiNameDebounce = Timer(const Duration(seconds: 2), () {
-          notifyListeners();
-        });
+        if (emitirSocket) {
+          shouldNotifyImmediately = false;
+          _uiNameDebounce?.cancel();
+          _uiNameDebounce = Timer(const Duration(seconds: 2), () {
+            notifyListeners();
+          });
+          SocketService().updateField('victima_${index}_nombre', nombre);
+        } else {
+          shouldNotifyImmediately = true;
+        }
       }
-      if (edad != null) v.edad = edad;
-      if (idConfGenero != null) v.idConfGenero = idConfGenero;
-      if (dni != null) v.dni = dni;
-      if (codigoTriage != null) v.codigoTriage = codigoTriage;
-      if (sintomas != null) v.sintomasSeleccionados = sintomas;
-      if (observaciones != null) v.observaciones = observaciones;
+      if (edad != null) {
+        v.edad = edad;
+        if (emitirSocket) {
+          SocketService().updateField('victima_${index}_edad', edad);
+        }
+      }
+      if (idConfGenero != null) {
+        v.idConfGenero = idConfGenero;
+        if (emitirSocket) {
+          SocketService().updateField('victima_${index}_genero', idConfGenero.toString());
+        }
+      }
+      if (dni != null) {
+        v.dni = dni;
+        if (emitirSocket) {
+          SocketService().updateField('victima_${index}_dni', dni);
+        }
+      }
+      if (codigoTriage != null) {
+        v.codigoTriage = codigoTriage;
+        if (emitirSocket) {
+          SocketService().updateField('victima_${index}_triage', codigoTriage);
+        }
+      }
+      if (sintomas != null) {
+        v.sintomasSeleccionados = sintomas;
+        if (emitirSocket) {
+          SocketService().updateField('victima_${index}_sintomas', sintomas.join(','));
+        }
+      }
+      if (observaciones != null) {
+        v.observaciones = observaciones;
+        if (emitirSocket) {
+          SocketService().updateField('victima_${index}_observaciones', observaciones);
+        }
+      }
       
       if (shouldNotifyImmediately) {
         notifyListeners();
@@ -354,6 +493,7 @@ class IngresoController extends ChangeNotifier {
       _victimas = [VictimaData()];
     }
     _llamadasDelIncidente = [demanda];
+    _sincronizarSocketRoom();
     _guardarBorrador();
     notifyListeners();
   }
@@ -381,6 +521,7 @@ class IngresoController extends ChangeNotifier {
       _victimas = [VictimaData()];
     }
     
+    _sincronizarSocketRoom();
     _guardarBorrador();
     notifyListeners();
   }

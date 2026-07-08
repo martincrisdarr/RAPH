@@ -13,6 +13,7 @@ class CustomSelect<T> extends StatefulWidget {
   final dynamic initialSelectionId;
   /// Función que extrae el ID comparable del item. Requerida si [initialSelectionId] es usado.
   final dynamic Function(T)? matchById;
+  final bool enabled;
 
   const CustomSelect({
     super.key,
@@ -24,6 +25,7 @@ class CustomSelect<T> extends StatefulWidget {
     this.initialSelection,
     this.initialSelectionId,
     this.matchById,
+    this.enabled = true,
   }) : assert(items != null || fetchItems != null,
             'Debes proveer la lista de items estáticos o la función fetchItems.');
 
@@ -107,6 +109,7 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
 
     return DropdownMenu<T>(
       key: ValueKey(widget.initialSelectionId),
+      enabled: widget.enabled,
       label: Text(widget.label),
       expandedInsets: EdgeInsets.zero,
       initialSelection: _resolvedInitialSelection,

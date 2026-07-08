@@ -34,12 +34,29 @@ class _NovedadesSectionState extends State<NovedadesSection> {
   @override
   void initState() {
     super.initState();
-    _lastIncidenteId = _ingresoController.incidenteActual.idIncidente;
+    final currentId = _ingresoController.incidenteActual.idIncidente;
+    _lastIncidenteId = currentId;
     _cargarLocal();
+    if (currentId != null) {
+      _fetchNovedades(currentId);
+    }
     _ingresoController.addListener(_onControllerUpdate);
   }
 
   int? _lastIncidenteId;
+
+  Future<void> _fetchNovedades(int currentId) async {
+    final fetchedNovedades = await NovedadService.obtenerPorIncidente(currentId);
+    if (_lastIncidenteId == currentId && mounted) {
+      setState(() {
+        _novedades.clear();
+        _novedades.addAll(fetchedNovedades);
+        _pendingIndexes.clear();
+      });
+      _guardarLocal();
+      _scrollToBottom();
+    }
+  }
 
   void _onControllerUpdate() async {
     final incidente = _ingresoController.incidenteActual;
@@ -50,17 +67,7 @@ class _NovedadesSectionState extends State<NovedadesSection> {
       _lastIncidenteId = currentId;
       
       if (currentId != null) {
-        final fetchedNovedades = await NovedadService.obtenerPorIncidente(currentId);
-        
-        if (_lastIncidenteId == currentId && mounted) {
-          setState(() {
-            _novedades.clear();
-            _novedades.addAll(fetchedNovedades);
-            _pendingIndexes.clear();
-          });
-          _guardarLocal();
-          _scrollToBottom();
-        }
+        _fetchNovedades(currentId);
       } else {
         if (mounted) {
           setState(() {

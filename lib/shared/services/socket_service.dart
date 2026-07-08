@@ -21,9 +21,17 @@ class SocketService {
   void connect(String token) {
     if (_socket != null && _socket!.connected) return;
 
-    _socket = io.io(ApiConfig.socketUrl, io.OptionBuilder()
-      .setTransports(['websocket'])
-      .setAuth({'token': token}) // Envío seguro del token
+    final uri = Uri.parse(ApiConfig.socketUrl);
+    final baseUrl = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}';
+    final socketPath = '/socket.io'; // Usamos el path root que responde con JSON y no da 404
+
+    debugPrint('[SocketService] Conectando a $baseUrl con path $socketPath');
+
+    _socket = io.io(baseUrl, io.OptionBuilder()
+      .setPath(socketPath)
+      .setTransports(['polling', 'websocket']) // Permite iniciar por HTTP polling y luego escalar a WebSocket
+      .setAuth({'token': token}) // Envío seguro del token (v3/v4)
+      .setQuery({'token': token}) // Compatibilidad con handshakes basados en query
       .enableForceNew()
       .build());
 
@@ -43,16 +51,17 @@ class SocketService {
 
     // Escuchar el estado completo (Late Joiner)
     _socket!.on(SocketEvents.serverSyncState, (data) {
-      if (data is Map<String, dynamic>) {
+      if (data is Map) {
         lockedFields.value = Map<String, dynamic>.from(data);
       }
     });
 
     // Escuchar cuando OTRA persona bloquea
     _socket!.on(SocketEvents.serverFieldLocked, (data) {
-      if (data is Map<String, dynamic>) {
+      if (data is Map) {
         final field = data['field'];
         final lockedBy = data['lockedBy'];
+        debugPrint('[SocketService] Recibido fieldLocked: field=$field, lockedBy=$lockedBy');
         if (field is String) {
           final currentLocks = Map<String, dynamic>.from(lockedFields.value);
           currentLocks[field] = lockedBy;
@@ -63,8 +72,9 @@ class SocketService {
 
     // Escuchar cuando OTRA persona libera
     _socket!.on(SocketEvents.serverFieldUnlocked, (data) {
-      if (data is Map<String, dynamic>) {
+      if (data is Map) {
         final field = data['field'];
+        debugPrint('[SocketService] Recibido fieldUnlocked: field=$field');
         if (field is String) {
           final currentLocks = Map<String, dynamic>.from(lockedFields.value);
           currentLocks.remove(field);
@@ -75,14 +85,15 @@ class SocketService {
 
     // Escuchar actualizaciones de campos en tiempo real
     _socket!.on(SocketEvents.serverFieldUpdated, (data) {
-      if (data is Map<String, dynamic>) {
+      if (data is Map) {
         final field = data['field'];
         final value = data['value'];
-        if (field is String && value is String) {
+        debugPrint('[SocketService] Recibido fieldUpdated: field=$field, value=$value');
+        if (field is String && value != null) {
           final callbacks = _fieldUpdateCallbacks[field];
           if (callbacks != null) {
             for (var callback in callbacks) {
-              callback(value);
+              callback(value.toString());
             }
           }
         }

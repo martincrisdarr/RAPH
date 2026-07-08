@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/socket_service.dart';
@@ -15,6 +16,7 @@ class CollabTextField extends StatefulWidget {
   final Widget? suffixIcon;
   final String? initialValue;
   final FormFieldValidator<String>? validator;
+  final bool isCollaborative;
 
   const CollabTextField({
     Key? key,
@@ -30,6 +32,7 @@ class CollabTextField extends StatefulWidget {
     this.suffixIcon,
     this.initialValue,
     this.validator,
+    this.isCollaborative = true,
   }) : super(key: key);
 
   @override
@@ -41,6 +44,7 @@ class _CollabTextFieldState extends State<CollabTextField> {
   late final TextEditingController _controller;
   bool _isLocalController = false;
   bool _isLocalFocusNode = false;
+  Timer? _unlockDebounce;
 
   @override
   void initState() {
@@ -70,14 +74,23 @@ class _CollabTextFieldState extends State<CollabTextField> {
   }
 
   void _onFocusChange() {
+    if (!widget.isCollaborative) return;
     if (_focusNode.hasFocus) {
+      _unlockDebounce?.cancel();
       SocketService().lockField(widget.fieldId);
     } else {
-      SocketService().unlockField(widget.fieldId);
+      _unlockDebounce?.cancel();
+      // Debounce de 150ms para evitar desbloqueos fantasmas por parpadeo de foco en Flutter Web
+      _unlockDebounce = Timer(const Duration(milliseconds: 150), () {
+        if (mounted && !_focusNode.hasFocus) {
+          SocketService().unlockField(widget.fieldId);
+        }
+      });
     }
   }
 
   void _onFieldUpdatedFromServer(String newValue) {
+    if (!widget.isCollaborative) return;
     // Si el usuario local NO está escribiendo (no tiene foco), actualizamos el valor en tiempo real
     if (!_focusNode.hasFocus) {
       if (_controller.text != newValue) {
@@ -98,6 +111,7 @@ class _CollabTextFieldState extends State<CollabTextField> {
 
   @override
   void dispose() {
+    _unlockDebounce?.cancel();
     SocketService().unregisterFieldListener(widget.fieldId, _onFieldUpdatedFromServer);
     _focusNode.removeListener(_onFocusChange);
     if (_isLocalFocusNode) {
@@ -116,7 +130,7 @@ class _CollabTextFieldState extends State<CollabTextField> {
     return ValueListenableBuilder<Map<String, dynamic>>(
       valueListenable: SocketService().lockedFields,
       builder: (context, locks, child) {
-        final bool isLocked = locks.containsKey(widget.fieldId);
+        final bool isLocked = widget.isCollaborative && locks.containsKey(widget.fieldId);
         String lockedByName = "";
 
         if (isLocked) {
@@ -137,7 +151,9 @@ class _CollabTextFieldState extends State<CollabTextField> {
               validator: widget.validator,
               onChanged: (val) {
                 // Emitir cambio en tiempo real al socket
-                SocketService().updateField(widget.fieldId, val);
+                if (widget.isCollaborative) {
+                  SocketService().updateField(widget.fieldId, val);
+                }
                 
                 // Disparar callback local
                 if (widget.onChanged != null) {
