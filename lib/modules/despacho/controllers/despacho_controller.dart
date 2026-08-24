@@ -214,7 +214,7 @@ class DespachoController extends ChangeNotifier {
 
   Future<void> cargarIncidentesActivos() async {
     try {
-      final raw = await ListadosService.obtenerDemandasRecibidas();
+      final raw = await ListadosService.obtenerIncidentesParaDespacho();
       final list = <DemandaRecibida>[];
       for (var e in raw) {
         Incidente? inc;
