@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/localidad.dart';
 import '../../config/auth_controller.dart';
 
 class LocalidadService {
   static const String _baseUrl =
-      'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/localidad';
+      '${ApiConfig.baseUrl}/localidad';
 
   static Map<String, String> _getHeaders() {
     final token = RaphAuthController.instance.token;

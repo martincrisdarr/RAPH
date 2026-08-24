@@ -30,11 +30,54 @@ class Victima {
   });
 
   factory Victima.fromJson(Map<String, dynamic> json) {
+    final persona = json['persona'];
+    final personaSinDni = json['persona_sin_dni'];
+
+    String? nombresApellidos = json['nombres_apellidos'] ?? json['nombre'];
+    int? dni = json['dni'] != null ? int.tryParse(json['dni'].toString()) : null;
+    int? idConfGenero = json['idconf_genero'] != null ? int.tryParse(json['idconf_genero'].toString()) : null;
+
+    if (persona is Map<String, dynamic>) {
+      final nombre = (persona['nombre'] ?? '').toString().trim();
+      final apellido = (persona['apellido'] ?? '').toString().trim();
+      final full = '$nombre $apellido'.trim();
+      if (full.isNotEmpty) nombresApellidos = full;
+      if (persona['dni'] != null) dni = int.tryParse(persona['dni'].toString());
+      if (persona['idconf_genero'] != null) idConfGenero = int.tryParse(persona['idconf_genero'].toString());
+    } else if (personaSinDni is Map<String, dynamic>) {
+      final nombre = (personaSinDni['nombre'] ?? '').toString().trim();
+      final apellido = (personaSinDni['apellido'] ?? '').toString().trim();
+      final full = '$nombre $apellido'.trim();
+      if (full.isNotEmpty) nombresApellidos = full;
+      if (personaSinDni['idconf_genero'] != null) idConfGenero = int.tryParse(personaSinDni['idconf_genero'].toString());
+    }
+
+    String? idMovilAsignado = json['id_movil_asignado']?.toString();
+    if ((idMovilAsignado == null || idMovilAsignado.isEmpty) && json['despachos'] is List) {
+      final despachosList = json['despachos'] as List;
+      final activos = despachosList.where((d) {
+        if (d is Map) {
+          final act = d['activo'];
+          return act == 1 || act == '1' || act == true;
+        }
+        return false;
+      }).toList();
+
+      final despachoActivo = activos.isNotEmpty ? activos.last : (despachosList.isNotEmpty ? despachosList.last : null);
+      if (despachoActivo is Map) {
+        if (despachoActivo['movilunidad'] is Map && despachoActivo['movilunidad']['idmovil'] != null) {
+          idMovilAsignado = despachoActivo['movilunidad']['idmovil'].toString();
+        } else if (despachoActivo['idmovilunidad'] != null) {
+          idMovilAsignado = despachoActivo['idmovilunidad'].toString();
+        }
+      }
+    }
+
     return Victima(
       idVictima: json['idvictima'] != null ? int.tryParse(json['idvictima'].toString()) : null,
-      nombresApellidos: json['nombres_apellidos'],
-      dni: json['dni'] != null ? int.tryParse(json['dni'].toString()) : null,
-      idConfGenero: json['idconf_genero'] != null ? int.tryParse(json['idconf_genero'].toString()) : null,
+      nombresApellidos: nombresApellidos,
+      dni: dni,
+      idConfGenero: idConfGenero,
       edad: json['edad'] != null ? int.tryParse(json['edad'].toString()) : null,
       estadoActual: json['estado_actual'],
       idConfCodigo: json['idconf_codigo'] != null ? int.tryParse(json['idconf_codigo'].toString()) : null,
@@ -46,7 +89,7 @@ class Victima {
           ? DateTime.tryParse(json['fechahora_confirma_despacho'])
           : null,
       observaciones: json['observaciones'],
-      idMovilAsignado: json['id_movil_asignado'],
+      idMovilAsignado: idMovilAsignado,
       reporte: json['reporte'],
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../../shared/models/localidad.dart';
 import '../../../shared/services/localidad_service.dart';
 import '../../../shared/components/autocomplete_select.dart';
@@ -294,9 +295,10 @@ class _UbicacionSectionState extends State<UbicacionSection> {
         final height = mediaQuery.size.height * 0.85;
         final width = mediaQuery.size.width * 0.9;
 
-        return Dialog(
-          backgroundColor: theme.colorScheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        return PointerInterceptor(
+          child: Dialog(
+            backgroundColor: theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           insetPadding: const EdgeInsets.all(24),
           child: Container(
             width: width,
@@ -395,10 +397,11 @@ class _UbicacionSectionState extends State<UbicacionSection> {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildLargeMapWidget(LatLng initialPos) {
     final bool mapsSupported = kIsWeb ||

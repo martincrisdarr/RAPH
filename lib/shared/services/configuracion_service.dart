@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/configuracion.dart';
 import '../../config/auth_controller.dart';
 
 class ConfiguracionService {
   static Future<List<Configuracion>> _fetchByTipo(int idTipo) async {
     final url = Uri.parse(
-      'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_vie_configuraciones?filter%5Bidconfiguraciontipo%5D=$idTipo',
+      '${ApiConfig.baseUrl}/ser_sien_dsp_vie_configuraciones?filter%5Bidconfiguraciontipo%5D=$idTipo',
     );
     final token = RaphAuthController.instance.token;
     final headers = <String, String>{};

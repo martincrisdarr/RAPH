@@ -8,7 +8,6 @@ import '../../../shared/models/incidente.dart';
 import '../../../shared/services/incidente_service.dart';
 import '../../../shared/models/victima_data.dart';
 import '../../../shared/services/victima_service.dart';
-import '../../../shared/models/victima.dart';
 import '../../../shared/services/socket_service.dart';
 
 class IngresoController extends ChangeNotifier {
@@ -25,7 +24,7 @@ class IngresoController extends ChangeNotifier {
   Incidente get incidenteActual => _incidenteActual;
 
   bool _tieneBorrador = false;
-  bool get tieneBorrador => _tieneBorrador;
+
 
   Timer? _debounceTimer;
   Timer? _debounceIncidenteTimer;
@@ -141,12 +140,33 @@ class IngresoController extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<String> _protocolosSeleccionados = [];
+  List<String> get protocolosSeleccionados => _protocolosSeleccionados;
+  set protocolosSeleccionados(List<String> value) {
+    _protocolosSeleccionados = value;
+    _guardarBorrador();
+    notifyListeners();
+  }
+
+  bool get tieneBorrador {
+    final tieneIdIncidente = _incidenteActual.idIncidente != null;
+    final tieneIdDemanda = _demandaActual.idDemandaRecibida != null;
+    final tieneTelefono = _demandaActual.nroLlamadaEntrante != null;
+    final tieneNombre = _demandaActual.apellidoNombre != null && _demandaActual.apellidoNombre!.trim().isNotEmpty;
+    final tieneDireccion = _incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty;
+    final tieneDescripcion = _incidenteActual.descripcion != null && _incidenteActual.descripcion!.trim().isNotEmpty;
+    final tieneProtocolos = _protocolosSeleccionados.isNotEmpty;
+
+    final tieneContenidoReal = tieneIdIncidente || tieneIdDemanda || tieneTelefono || tieneNombre || tieneDireccion || tieneDescripcion || tieneProtocolos;
+    return _tieneBorrador && tieneContenidoReal;
+  }
+
   Future<void> _cargarBorrador() async {
     final prefs = await SharedPreferences.getInstance();
     final draftJson = prefs.getString(_draftKey);
     final incDraftJson = prefs.getString(_incidenteDraftKey);
-    
-    _tieneBorrador = (draftJson != null || incDraftJson != null);
+    final victimasDraftJson = prefs.getString('victimas_draft');
+    final protoDraft = prefs.getStringList('protocolos_draft');
 
     if (draftJson != null) {
       try {
@@ -166,14 +186,62 @@ class IngresoController extends ChangeNotifier {
         print('Error al cargar borrador de incidente: $e');
       }
     }
+
+    if (victimasDraftJson != null) {
+      try {
+        final List decodedV = jsonDecode(victimasDraftJson);
+        if (decodedV.isNotEmpty) {
+          _victimas = decodedV.map((v) => VictimaData.fromStorageJson(v)).toList();
+        }
+      } catch (e) {
+        print('Error al cargar borrador de víctimas: $e');
+      }
+    }
+
+    if (protoDraft != null) {
+      _protocolosSeleccionados = protoDraft;
+    }
+
+    _tieneBorrador = _incidenteActual.idIncidente != null ||
+        _demandaActual.idDemandaRecibida != null ||
+        _demandaActual.nroLlamadaEntrante != null ||
+        (_demandaActual.apellidoNombre != null && _demandaActual.apellidoNombre!.trim().isNotEmpty) ||
+        (_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) ||
+        (_incidenteActual.descripcion != null && _incidenteActual.descripcion!.trim().isNotEmpty) ||
+        _protocolosSeleccionados.isNotEmpty;
     
     notifyListeners();
   }
 
   Future<void> _guardarBorrador() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    final tieneContenidoReal = _incidenteActual.idIncidente != null ||
+        _demandaActual.idDemandaRecibida != null ||
+        _demandaActual.nroLlamadaEntrante != null ||
+        (_demandaActual.apellidoNombre != null && _demandaActual.apellidoNombre!.trim().isNotEmpty) ||
+        (_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) ||
+        (_incidenteActual.descripcion != null && _incidenteActual.descripcion!.trim().isNotEmpty) ||
+        _protocolosSeleccionados.isNotEmpty;
+
+    if (!tieneContenidoReal) {
+      await prefs.remove(_draftKey);
+      await prefs.remove(_incidenteDraftKey);
+      await prefs.remove('novedades_draft');
+      await prefs.remove('victimas_draft');
+      await prefs.remove('protocolos_draft');
+      if (_tieneBorrador) {
+        _tieneBorrador = false;
+        notifyListeners();
+      }
+      return;
+    }
+
     await prefs.setString(_draftKey, jsonEncode(_demandaActual.toJson()));
     await prefs.setString(_incidenteDraftKey, jsonEncode(_incidenteActual.toJson()));
+    await prefs.setStringList('protocolos_draft', _protocolosSeleccionados);
+    final victimasJson = _victimas.map((v) => v.toStorageJson()).toList();
+    await prefs.setString('victimas_draft', jsonEncode(victimasJson));
     if (!_tieneBorrador) {
       _tieneBorrador = true;
       notifyListeners();
@@ -181,17 +249,41 @@ class IngresoController extends ChangeNotifier {
   }
 
   Future<void> limpiarBorrador() async {
+    _debounceTimer?.cancel();
+    _debounceIncidenteTimer?.cancel();
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_draftKey);
     await prefs.remove(_incidenteDraftKey);
     await prefs.remove('novedades_draft');
+    await prefs.remove('victimas_draft');
+    await prefs.remove('protocolos_draft');
     _demandaActual = DemandaRecibida(idCfgEstado: 5);
     _incidenteActual = Incidente(idLocalidad: 580056);
     _victimas = [VictimaData()];
     _selectedVictimaIndex = 0;
+    _protocolosSeleccionados = [];
     _llamadasDelIncidente = [];
     _tieneBorrador = false;
     _sincronizarSocketRoom();
+    notifyListeners();
+  }
+
+  /// Prepara el formulario de ingreso para registrar una nueva llamada sobre el MISMO incidente activo
+  Future<void> prepararNuevaLlamadaParaIncidente() async {
+    final currentIncId = _incidenteActual.idIncidente;
+    final currentInc = _incidenteActual;
+
+    // Se resetea la demanda (teléfono, nombre del llamante, etc.) manteniendo la vinculación con el incidente activo
+    _demandaActual = DemandaRecibida(
+      idCfgEstado: 5,
+      idIncidente: currentIncId,
+      incidente: currentInc,
+      fechaHora: DateTime.now(),
+    );
+
+    _sincronizarSocketRoom();
+    await _guardarBorrador();
     notifyListeners();
   }
 
@@ -271,9 +363,11 @@ class IngresoController extends ChangeNotifier {
     _sincronizarSocketRoom();
     _guardarBorrador();
     notifyListeners();
-    // Si viene descripcion, también programar sync del incidente
-    if (descripcion != null) {
+
+    // Si viene domicilio, coordenadas, descripcion o codigoTriage, programar sync del incidente y demanda
+    if (direccion != null || direccionAuto != null || latitud != null || descripcion != null || codigoTriage != null) {
       _programarGuardadoRemotoIncidente();
+      _programarGuardadoRemoto();
     }
   }
 
@@ -294,34 +388,59 @@ class IngresoController extends ChangeNotifier {
       await syncIncidenteDesdeGoogleMaps();
     });
   }
-
+  
   Future<void> _sincronizarConBackend() async {
-    // Si no tenemos ID, es un POST
+    // Si no tenemos ID de demanda recibida, sólo se hace POST si el usuario ha escrito datos reales del llamante
     if (_demandaActual.idDemandaRecibida == null) {
-      // Evitar POST vacíos, al menos debe tener un tipo de ingreso, o nombre, o telefono
-      if (_demandaActual.idCfgTipoIngreso != null || 
-          _demandaActual.nroLlamadaEntrante != null || 
-          _demandaActual.apellidoNombre != null) {
-        
-        final creada = await DemandaRecibidaService.crear(_demandaActual);
-        if (creada != null && creada.idDemandaRecibida != null) {
-          _demandaActual = _demandaActual.copyWith(idDemandaRecibida: creada.idDemandaRecibida);
-          await _guardarBorrador();
-          notifyListeners();
+      final tieneDatosLlamante = _demandaActual.nroLlamadaEntrante != null ||
+          (_demandaActual.apellidoNombre != null && _demandaActual.apellidoNombre!.trim().isNotEmpty) ||
+          (_demandaActual.dni != null && _demandaActual.dni!.trim().isNotEmpty);
+
+      if (!tieneDatosLlamante) {
+        return; // Evitar POSTs de demandas vacías al ingresar a un incidente
+      }
+
+      // Asegurar que si tenemos datos de incidente pero no idIncidente aún, se cree/vincule el incidente primero
+      if (_demandaActual.idIncidente == null && 
+          ((_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) || 
+           (_incidenteActual.direccionAuto != null && _incidenteActual.direccionAuto!.trim().isNotEmpty) || 
+           _incidenteActual.latitud != null ||
+           (_incidenteActual.codigoTriage != null && _incidenteActual.codigoTriage!.trim().isNotEmpty))) {
+        if (_incidenteActual.idIncidente == null) {
+          final creadoInc = await IncidenteService.crear(_incidenteActual);
+          if (creadoInc != null && creadoInc.idIncidente != null) {
+            _incidenteActual = _incidenteActual.copyWith(idIncidente: creadoInc.idIncidente);
+            _demandaActual = _demandaActual.copyWith(idIncidente: creadoInc.idIncidente);
+          }
+        } else {
+          _demandaActual = _demandaActual.copyWith(idIncidente: _incidenteActual.idIncidente);
         }
       }
+
+      final creada = await DemandaRecibidaService.crear(_demandaActual);
+      if (creada != null && creada.idDemandaRecibida != null) {
+        _demandaActual = _demandaActual.copyWith(idDemandaRecibida: creada.idDemandaRecibida);
+        await _guardarBorrador();
+        notifyListeners();
+      }
     } else {
-      // Es un PUT
+      // Es un PUT de una demanda previamente guardada
       await DemandaRecibidaService.actualizar(_demandaActual);
     }
-
-    // Sincronizar Incidente (NO se dispara desde el debounce, solo desde Google Maps)
   }
 
-  /// Se llama únicamente cuando el usuario confirma una ubicación desde el mapa
-  /// (tap en el mapa o link de WhatsApp). Hace POST si es nuevo o PUT si ya existe.
+  /// Se llama cuando se modifica cualquier propiedad del incidente (ubicación, código, descripción).
+  /// Hace POST si es un incidente nuevo o PUT si ya existe.
   Future<void> syncIncidenteDesdeGoogleMaps() async {
-    if (_incidenteActual.latitud == null || _incidenteActual.longitud == null) return;
+    final tieneContenido = _incidenteActual.latitud != null ||
+        _incidenteActual.longitud != null ||
+        (_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) ||
+        (_incidenteActual.direccionAuto != null && _incidenteActual.direccionAuto!.trim().isNotEmpty) ||
+        (_incidenteActual.descripcion != null && _incidenteActual.descripcion!.trim().isNotEmpty) ||
+        (_incidenteActual.codigoTriage != null && _incidenteActual.codigoTriage!.trim().isNotEmpty) ||
+        _incidenteActual.idConfCodigo != null;
+
+    if (!tieneContenido) return;
 
     if (_incidenteActual.idIncidente == null) {
       final creado = await IncidenteService.crear(_incidenteActual);
@@ -358,12 +477,31 @@ class IngresoController extends ChangeNotifier {
   }
 
   void addVictima({bool emitirSocket = true}) {
-    _victimas.add(VictimaData());
+    final nueva = VictimaData();
+    if (_incidenteActual.codigoTriage == 'Rojo' || _incidenteActual.idConfCodigo == 29 || _protocolosSeleccionados.isNotEmpty) {
+      nueva.codigoTriage = 'Rojo';
+    }
+    _victimas.add(nueva);
     _selectedVictimaIndex = _victimas.length - 1;
     _registrarOyentesParaVictimaIndex(_selectedVictimaIndex);
     if (emitirSocket) {
       SocketService().updateField('victimas_action', 'add');
     }
+    _guardarBorrador();
+    notifyListeners();
+  }
+
+  void updateTodasLasVictimas({required String codigoTriage, bool emitirSocket = true}) {
+    for (int i = 0; i < _victimas.length; i++) {
+      _victimas[i].codigoTriage = codigoTriage;
+      if (emitirSocket) {
+        SocketService().updateField('victima_${i}_triage', codigoTriage);
+      }
+      if (_victimas[i].idVictima != null && (_victimas[i].nombre.trim().isNotEmpty || _victimas[i].dni.trim().isNotEmpty)) {
+        _programarSyncVictima(_victimas[i]);
+      }
+    }
+    _guardarBorrador();
     notifyListeners();
   }
 
@@ -450,7 +588,9 @@ class IngresoController extends ChangeNotifier {
       if (shouldNotifyImmediately) {
         notifyListeners();
       }
-      _programarSyncVictima(v);
+      if (emitirSocket) {
+        _programarSyncVictima(v);
+      }
     }
   }
 
@@ -466,7 +606,7 @@ class IngresoController extends ChangeNotifier {
   Future<void> _sincronizarVictima(VictimaData victima) async {
     final payload = victima.toVictima(_incidenteActual.idIncidente);
     if (victima.idVictima == null) {
-      if (victima.nombre.isEmpty && victima.dni.isEmpty && victima.idConfGenero == null) return;
+      if (victima.nombre.trim().isEmpty && victima.dni.trim().isEmpty) return;
       final creada = await VictimaService.crear(payload);
       if (creada != null && creada.idVictima != null) {
         victima.idVictima = creada.idVictima;
@@ -477,12 +617,70 @@ class IngresoController extends ChangeNotifier {
     }
   }
 
-  void cargarDemanda(DemandaRecibida demanda) {
+  Future<void> cargarIncidenteDirecto(Map<String, dynamic> rawMap) async {
+    _vistaFormulario = true;
+    _selectedVictimaIndex = 0;
+
+    Map<String, dynamic> incData = rawMap;
+    if (rawMap.containsKey('incidente') && rawMap['incidente'] is Map) {
+      incData = rawMap['incidente'];
+    }
+
+    final idInc = (rawMap['idincidente'] ?? incData['idincidente'] ?? rawMap['iddemandarecibida'])?.toString();
+    final int? idIncidente = idInc != null ? int.tryParse(idInc) : null;
+
+    _incidenteActual = Incidente.fromJson(incData);
+
+    if ((_incidenteActual.codigoTriage == 'Rojo' || _incidenteActual.idConfCodigo == 29) && _protocolosSeleccionados.isEmpty) {
+      _protocolosSeleccionados = ['Accidente Vehicular'];
+    }
+
+    if (_incidenteActual.victimas != null && _incidenteActual.victimas!.isNotEmpty) {
+      _victimas = _incidenteActual.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
+    } else {
+      _victimas = [VictimaData()];
+    }
+
+    // Al ingresar a un incidente desde el tablero, los campos de INGRESO se mantienen limpios (listos para una nueva llamada)
+    // manteniendo la vinculación al idIncidente
+    _demandaActual = DemandaRecibida(
+      idCfgEstado: 5,
+      idIncidente: idIncidente,
+      incidente: _incidenteActual,
+      fechaHora: DateTime.now(),
+    );
+
+    _sincronizarSocketRoom();
+    await _guardarBorrador();
+    notifyListeners();
+
+    // Carga diferida (Lazy loading) de los datos profundos del incidente (víctimas, novedades, despachos) solo al ingresar
+    if (idIncidente != null) {
+      final incidenteCompleto = await IncidenteService.obtenerPorId(idIncidente);
+      if (incidenteCompleto != null) {
+        _incidenteActual = incidenteCompleto;
+        if (incidenteCompleto.victimas != null && incidenteCompleto.victimas!.isNotEmpty) {
+          _victimas = incidenteCompleto.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
+        }
+        _demandaActual = _demandaActual.copyWith(incidente: _incidenteActual);
+      }
+
+      final llamadas = await DemandaRecibidaService.obtenerTodasPorIncidente(idIncidente);
+      _llamadasDelIncidente = llamadas;
+      await _guardarBorrador();
+      notifyListeners();
+    }
+  }
+
+  Future<void> cargarDemanda(DemandaRecibida demanda) async {
     _demandaActual = demanda;
     _selectedVictimaIndex = 0; 
     _vistaFormulario = true;
     if (demanda.incidente != null) {
       _incidenteActual = demanda.incidente!;
+      if ((_incidenteActual.codigoTriage == 'Rojo' || _incidenteActual.idConfCodigo == 29) && _protocolosSeleccionados.isEmpty) {
+        _protocolosSeleccionados = ['Accidente Vehicular'];
+      }
       if (demanda.incidente!.victimas != null && demanda.incidente!.victimas!.isNotEmpty) {
         _victimas = demanda.incidente!.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
       } else {
@@ -496,6 +694,32 @@ class IngresoController extends ChangeNotifier {
     _sincronizarSocketRoom();
     _guardarBorrador();
     notifyListeners();
+
+    // Carga diferida (Lazy loading) de los datos profundos del incidente por ID
+    final idDemanda = demanda.idDemandaRecibida;
+    final idIncidente = demanda.incidente?.idIncidente ?? demanda.idIncidente;
+    if (idDemanda != null || idIncidente != null) {
+      DemandaRecibida? completa;
+      if (idDemanda != null) {
+        completa = await DemandaRecibidaService.obtenerPorId(idDemanda);
+      }
+      completa ??= idIncidente != null ? await DemandaRecibidaService.obtenerPorIncidente(idIncidente) : null;
+
+      if (completa != null) {
+        _demandaActual = completa;
+        if (completa.incidente != null) {
+          _incidenteActual = completa.incidente!;
+          if ((_incidenteActual.codigoTriage == 'Rojo' || _incidenteActual.idConfCodigo == 29) && _protocolosSeleccionados.isEmpty) {
+            _protocolosSeleccionados = ['Accidente Vehicular'];
+          }
+          if (completa.incidente!.victimas != null && completa.incidente!.victimas!.isNotEmpty) {
+            _victimas = completa.incidente!.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
+          }
+        }
+        _guardarBorrador();
+        notifyListeners();
+      }
+    }
   }
 
   void cargarIncidenteYListarLlamadas(DemandaRecibida demandaConIncidente, List<DemandaRecibida> llamadas) {

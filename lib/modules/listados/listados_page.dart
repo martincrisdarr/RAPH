@@ -3,6 +3,7 @@ import '../../shared/models/demanda_recibida.dart';
 import '../ingreso/controllers/ingreso_controller.dart';
 import 'widgets/kanban_column.dart';
 import 'widgets/kanban_card.dart';
+import 'widgets/kanban_card_skeleton.dart';
 import 'widgets/filter_sidebar.dart';
 import '../../shared/services/listados_service.dart';
 
@@ -68,9 +69,16 @@ class _ListadosPageState extends State<ListadosPage> {
       final demandas = resultados[0];
       setState(() {
         _rawDemandas = demandas;
-        // Convert raw demands to KanbanItem objects
-        _items = demandas.map<KanbanItem>((map) {
-          String? priority = map['prioridad'];
+        // Convert raw demands/incidents to KanbanItem objects (Deduplicados por Incidente)
+        final Map<String, KanbanItem> itemsMap = {};
+
+        for (final map in demandas) {
+          final incident = (map.containsKey('incidente') && map['incidente'] != null) ? map['incidente'] : map;
+          final idIncidente = (map['idincidente'] ?? incident['idincidente'] ?? map['iddemandarecibida'])?.toString() ?? '';
+
+          if (idIncidente.isEmpty) continue;
+
+          String? priority = map['prioridad'] ?? incident['codigo_triage'] ?? incident['codigoTriage'];
           Color priorityColor;
           switch (priority?.toUpperCase()) {
             case 'ROJO':
@@ -84,8 +92,8 @@ class _ListadosPageState extends State<ListadosPage> {
               break;
             default:
               priorityColor = Colors.grey;
-            }
-          // Moviles list conversion
+          }
+
           List<MovilStatus> moviles = [];
           if (map['moviles'] is List) {
             moviles = (map['moviles'] as List).map<MovilStatus>((m) {
@@ -98,28 +106,39 @@ class _ListadosPageState extends State<ListadosPage> {
               );
             }).toList();
           }
-            // Extract nested incident and status info
-            final incident = map['incidente'];
-            final estado = map['estado'];
-            String title = incident != null && incident['descripcion'] != null && incident['descripcion'].toString().isNotEmpty
-                ? incident['descripcion']
-                : 'Sin descripción';
-            String subtitle = incident != null && incident['direccion'] != null ? incident['direccion'] : 'Sin dirección';
-            String time = incident != null && incident['fechahoraauto'] != null ? incident['fechahoraauto'] : '';
-            String rawStatus = estado != null && estado['descripcion'] != null ? estado['descripcion'] : 'Desconocido';
-            const allowedStatuses = ['Llamada recibida', 'En curso', 'Finalizado'];
-            String status = allowedStatuses.contains(rawStatus) ? rawStatus : 'Llamada recibida';
-            return KanbanItem(
-              id: map['iddemandarecibida']?.toString() ?? '',
-              title: title,
-              subtitle: subtitle,
-              time: time,
-              priority: priority,
-              priorityColor: priorityColor,
-              moviles: moviles,
-              status: status,
-            );
-        }).toList();
+
+          final estado = map['estado'] ?? (map['ultimoEstadoRel'] != null ? map['ultimoEstadoRel']['estadoRel'] : null);
+
+          final String direccionStr = (incident['direccion'] != null && incident['direccion'].toString().trim().isNotEmpty)
+              ? incident['direccion'].toString().trim()
+              : ((incident['direccion_auto'] != null && incident['direccion_auto'].toString().trim().isNotEmpty)
+                  ? incident['direccion_auto'].toString().trim()
+                  : 'Sin dirección');
+
+          final String descripcionStr = (incident['descripcion'] != null && incident['descripcion'].toString().trim().isNotEmpty)
+              ? incident['descripcion'].toString().trim()
+              : 'Sin descripción';
+
+          String title = direccionStr;
+          String subtitle = descripcionStr;
+          String time = (incident['fechahoraauto'] ?? map['fechahora'])?.toString() ?? '';
+          String rawStatus = estado != null && estado['descripcion'] != null ? estado['descripcion'].toString() : 'Desconocido';
+          const allowedStatuses = ['Llamada recibida', 'En curso', 'Finalizado'];
+          String status = allowedStatuses.contains(rawStatus) ? rawStatus : 'Llamada recibida';
+
+          itemsMap[idIncidente] = KanbanItem(
+            id: idIncidente,
+            title: title,
+            subtitle: subtitle,
+            time: time,
+            priority: priority,
+            priorityColor: priorityColor,
+            moviles: moviles,
+            status: status,
+          );
+        }
+
+        _items = itemsMap.values.toList();
         _isLoading = false;
       });
       
@@ -136,7 +155,7 @@ class _ListadosPageState extends State<ListadosPage> {
 
   void _onItemDropped(String itemTitle, String newStatus) {
     setState(() {
-      final itemIndex = _items.indexWhere((item) => item.title == itemTitle);
+      final itemIndex = _items.indexWhere((item) => item.id == itemTitle || item.title == itemTitle);
       if (itemIndex != -1) {
         final item = _items[itemIndex];
         item.status = newStatus;
@@ -277,18 +296,21 @@ class _ListadosPageState extends State<ListadosPage> {
                         statuses: const ['Llamada recibida'],
                         dropStatus: 'Llamada recibida',
                         flex: 1,
+                        accentColor: const Color(0xFF38BDF8),
                       ),
                       _buildColumn(
                         title: 'En curso',
                         statuses: const ['En curso', 'Despachado', 'En sitio', 'Traslado', 'Arribado'],
                         dropStatus: 'En curso',
                         flex: 2,
+                        accentColor: const Color(0xFFF59E0B),
                       ),
                       _buildColumn(
                         title: 'Finalizado',
                         statuses: const ['Finalizado'],
                         dropStatus: 'Finalizado',
                         flex: 1,
+                        accentColor: const Color(0xFF10B981),
                       ),
                     ],
                   ),
@@ -326,45 +348,60 @@ class _ListadosPageState extends State<ListadosPage> {
     required List<String> statuses,
     required String dropStatus,
     int flex = 1,
+    Color? accentColor,
   }) {
     final columnItems = _items.where((item) => statuses.contains(item.status)).toList();
     final isEnCurso = title == 'En curso';
+
+    final List<Widget> childrenWidgets;
+    if (_isLoading) {
+      final skeletonCount = isEnCurso ? 4 : 2;
+      childrenWidgets = List.generate(
+        skeletonCount,
+        (_) => const KanbanCardSkeleton(),
+      );
+    } else {
+      childrenWidgets = columnItems.map((item) {
+        // Buscar el raw map correspondiente a este incidente
+        final rawMap = _rawDemandas.firstWhere(
+          (m) {
+            final idInc = (m['idincidente'] ?? (m['incidente'] != null ? m['incidente']['idincidente'] : null) ?? m['iddemandarecibida'])?.toString();
+            return idInc == item.id;
+          },
+          orElse: () => <String, dynamic>{},
+        );
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () async {
+              if (rawMap.isNotEmpty) {
+                await IngresoController().cargarIncidenteDirecto(rawMap);
+              }
+              widget.onNewIncidentTap?.call(false);
+            },
+            child: KanbanCard(
+              title: item.title,
+              subtitle: item.subtitle,
+              time: item.time,
+              moviles: item.moviles,
+              globalStatus: item.status,
+              priority: item.priority,
+              priorityColor: item.priorityColor,
+            ),
+          ),
+        );
+      }).toList();
+    }
     
     return Expanded(
       flex: flex,
       child: KanbanColumn(
         title: title,
-        count: columnItems.length,
+        count: _isLoading ? 0 : columnItems.length,
         isGrid: isEnCurso,
+        accentColor: accentColor,
         onAccept: (itemTitle) => _onItemDropped(itemTitle, dropStatus),
-        children: columnItems.map((item) {
-          // Buscar el raw map de esta demanda por id
-          final rawMap = _rawDemandas.firstWhere(
-            (m) => m['iddemandarecibida']?.toString() == item.id,
-            orElse: () => <String, dynamic>{},
-          );
-          return MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () {
-                if (rawMap.isNotEmpty) {
-                  final demanda = DemandaRecibida.fromJson(rawMap);
-                  IngresoController().cargarDemanda(demanda);
-                }
-                widget.onNewIncidentTap?.call(false);
-              },
-              child: KanbanCard(
-                title: item.title,
-                subtitle: item.subtitle,
-                time: item.time,
-                moviles: item.moviles,
-                globalStatus: item.status,
-                priority: item.priority,
-                priorityColor: item.priorityColor,
-              ),
-            ),
-          );
-        }).toList(),
+        children: childrenWidgets,
       ),
     );
   }

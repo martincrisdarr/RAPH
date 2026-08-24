@@ -3,21 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/models/unidad.dart';
 import '../../../shared/models/movil.dart';
+import '../../../shared/models/movil_estado.dart';
 import '../../../shared/models/demanda_recibida.dart';
 import '../../../shared/models/incidente.dart';
 import '../../../shared/models/victima.dart';
 import '../../../shared/services/listados_service.dart';
 import '../../../shared/services/demanda_recibida_service.dart';
+import '../../../shared/services/geocoding_service.dart';
+import '../../../shared/services/movil_service.dart';
+import '../../../shared/services/movil_estado_service.dart';
+import '../../../shared/services/despacho_service.dart';
+import '../../../shared/services/unidad_service.dart';
 
 class DespachoController extends ChangeNotifier {
   static final DespachoController _instance = DespachoController._internal();
   factory DespachoController() => _instance;
-  DespachoController._internal() {
-    inicializar();
-  }
+  DespachoController._internal();
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
 
   List<Unidad> _unidades = [];
   List<Unidad> get unidades => _unidades;
@@ -25,13 +32,27 @@ class DespachoController extends ChangeNotifier {
   List<Movil> _moviles = [];
   List<Movil> get moviles => _moviles;
 
+  List<MovilEstado> _estadosMovil = [];
+  List<MovilEstado> get estadosMovil => _estadosMovil;
+
   List<DemandaRecibida> _incidentesActivos = [];
   List<DemandaRecibida> get incidentesActivos => _incidentesActivos;
 
   static const String _unidadesKey = 'despacho_unidades';
   static const String _movilesKey = 'despacho_moviles';
 
-  Future<void> inicializar() async {
+  int? getIdEstadoPorNombre(String estadoNombre) {
+    if (_estadosMovil.isEmpty) return null;
+    final found = _estadosMovil.firstWhere(
+      (e) => e.nombre.toLowerCase().trim() == estadoNombre.toLowerCase().trim(),
+      orElse: () => _estadosMovil.first,
+    );
+    return found.idmovilEstado;
+  }
+
+  Future<void> inicializar({bool force = false}) async {
+    if (_isInitialized && !force) return;
+    _isInitialized = true;
     _isLoading = true;
     notifyListeners();
 
@@ -40,6 +61,51 @@ class DespachoController extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  bool _isMovilesLoading = false;
+  bool get isMovilesLoading => _isMovilesLoading;
+
+  bool _isUnidadesLoading = false;
+  bool get isUnidadesLoading => _isUnidadesLoading;
+
+  Future<void> cargarMoviles() async {
+    _isMovilesLoading = true;
+    notifyListeners();
+
+    try {
+      if (_estadosMovil.isEmpty) {
+        _estadosMovil = await MovilEstadoService.obtenerEstados();
+      }
+      final remoteMoviles = await MovilService.obtenerMoviles();
+      if (remoteMoviles.isNotEmpty) {
+        _moviles = remoteMoviles;
+        _guardarMoviles();
+      }
+    } catch (e) {
+      print('[DespachoController] Error al obtener móviles del backend: $e');
+    } finally {
+      _isMovilesLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> cargarUnidades() async {
+    _isUnidadesLoading = true;
+    notifyListeners();
+
+    try {
+      final remoteUnidades = await UnidadService.obtenerUnidades();
+      if (remoteUnidades.isNotEmpty) {
+        _unidades = remoteUnidades;
+        _guardarUnidades();
+      }
+    } catch (e) {
+      print('[DespachoController] Error al obtener unidades del backend: $e');
+    } finally {
+      _isUnidadesLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _cargarDatosLocales() async {
@@ -115,29 +181,32 @@ class DespachoController extends ChangeNotifier {
       Movil(
         id: 'm1',
         nombre: 'Móvil 1',
+        descripcion: 'Unidad de Alta Complejidad - Base Central',
+        activo: 1,
         estado: 'Disponible',
         idUnidadAsignada: 'u1',
         latitud: -38.9515,
         longitud: -68.0610,
-        personal: 'Dr. Rossi, Enf. Vega, Chof. Muñoz',
       ),
       Movil(
         id: 'm2',
         nombre: 'Móvil 2',
+        descripcion: 'Unidad 4x4 de Rescate - Base Zonal',
+        activo: 1,
         estado: 'Disponible',
         idUnidadAsignada: 'u2',
         latitud: -38.9580,
         longitud: -68.0520,
-        personal: 'Dra. Castillo, Enf. Pereyra, Chof. Gómez',
       ),
       Movil(
         id: 'm3',
         nombre: 'Móvil 3',
+        descripcion: 'Unidad de Reserva',
+        activo: 0,
         estado: 'Inactivo',
         idUnidadAsignada: null,
         latitud: -38.9480,
         longitud: -68.0750,
-        personal: 'Sin tripulación asignada',
       ),
     ];
     _guardarMoviles();
@@ -146,22 +215,101 @@ class DespachoController extends ChangeNotifier {
   Future<void> cargarIncidentesActivos() async {
     try {
       final raw = await ListadosService.obtenerDemandasRecibidas();
-      // Filtrar y mapear las demandas a DemandaRecibida.
-      // Mostramos las que están en curso o pendientes de despacho (idCfgEstado = 5 o 6).
-      // En este sistema, asumimos que todas las demandas devueltas son incidentes activos si su estado no es finalizado.
-      _incidentesActivos = raw
-          .map((e) => DemandaRecibida.fromJson(e))
-          .where((demanda) {
-            final estadoCod = demanda.idCfgEstado;
-            // Mostramos los incidentes que no estén finalizados/cerrados
-            // Si el backend no tiene estados detallados, se muestran todos los que posean incidente asociado
-            return demanda.incidente != null && estadoCod != 7 && estadoCod != 8;
-          })
-          .toList();
+      final list = <DemandaRecibida>[];
+      for (var e in raw) {
+        Incidente? inc;
+        int? idDemanda;
+        int? estadoCod;
+
+        if (e.containsKey('incidente') && e['incidente'] is Map) {
+          inc = Incidente.fromJson(e['incidente']);
+          idDemanda = int.tryParse(e['iddemandarecibida']?.toString() ?? '');
+          estadoCod = int.tryParse(e['idcfg_estado']?.toString() ?? '');
+        } else if (e.containsKey('idincidente') || e.containsKey('direccion')) {
+          inc = Incidente.fromJson(e);
+          idDemanda = int.tryParse(e['idincidente']?.toString() ?? '');
+          if (e['ultimoEstadoRel'] is Map) {
+            estadoCod = int.tryParse(e['ultimoEstadoRel']['idestado']?.toString() ?? '');
+          }
+        }
+
+        if (inc != null && inc.activo != 0 && estadoCod != 7 && estadoCod != 8) {
+          list.add(DemandaRecibida(
+            idDemandaRecibida: idDemanda,
+            idIncidente: inc.idIncidente,
+            incidente: inc,
+            idCfgEstado: estadoCod,
+          ));
+        }
+      }
       
-      // Si el backend está vacío o no tiene incidentes con lat/lng, agregamos un par de incidentes simulados
-      // para asegurar una experiencia increíble ("no placeholders, rich aesthetics").
-      if (_incidentesActivos.isEmpty) {
+      // Geocodificar automáticamente las direcciones que no tengan latitud/longitud
+      for (int i = 0; i < list.length; i++) {
+        final d = list[i];
+        if (d.incidente != null && (d.incidente!.latitud == null || d.incidente!.longitud == null)) {
+          final dir = d.incidente!.direccion;
+          if (dir != null && dir.trim().isNotEmpty) {
+            final coords = await GeocodingService.getCoordinatesFromAddress(dir);
+            if (coords != null) {
+              list[i] = d.copyWith(
+                incidente: d.incidente!.copyWith(
+                  latitud: coords.latitude,
+                  longitud: coords.longitude,
+                ),
+              );
+            } else {
+              // Asignar coordenadas centro Neuquén con offset si no se encuentra geocodificación
+              final offset = ((d.idDemandaRecibida ?? 1) % 5) * 0.003;
+              list[i] = d.copyWith(
+                incidente: d.incidente!.copyWith(
+                  latitud: -38.9516 + offset,
+                  longitud: -68.0591 + offset,
+                ),
+              );
+            }
+          }
+        }
+      }
+
+      _incidentesActivos = list;
+
+      // Sincronizar estado de móviles según las víctimas y sus despachos activos en la BD
+      for (var demanda in _incidentesActivos) {
+        final inc = demanda.incidente;
+        if (inc?.victimas != null) {
+          for (var vic in inc!.victimas!) {
+            if (vic.idMovilAsignado != null && vic.idMovilAsignado!.isNotEmpty) {
+              final mId = vic.idMovilAsignado!;
+              final cleanAssigned = mId.replaceAll(RegExp(r'[^0-9]'), '');
+              final mIndex = _moviles.indexWhere((m) {
+                final cleanM = m.id.replaceAll(RegExp(r'[^0-9]'), '');
+                return m.id == mId || (cleanM.isNotEmpty && cleanM == cleanAssigned);
+              });
+
+              if (mIndex != -1) {
+                final m = _moviles[mIndex];
+                if (m.estado == 'Disponible') {
+                  double offsetLat = 0.002;
+                  double offsetLng = 0.002;
+                  double destLat = (inc.latitud ?? -38.9516) + offsetLat;
+                  double destLng = (inc.longitud ?? -68.0591) + offsetLng;
+
+                  _moviles[mIndex] = m.copyWith(
+                    estado: 'Despachado',
+                    idmovilEstado: getIdEstadoPorNombre('Despachado'),
+                    idIncidenteActivo: inc.idIncidente ?? demanda.idDemandaRecibida,
+                    latitud: destLat,
+                    longitud: destLng,
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Solo agregar incidentes simulados si el backend no devolvió ninguna demanda
+      if (_incidentesActivos.isEmpty && raw.isEmpty) {
         _incidentesActivos = [
           DemandaRecibida(
             idDemandaRecibida: 101,
@@ -346,62 +494,57 @@ class DespachoController extends ChangeNotifier {
     }
   }
 
-  // --- Gestión de Unidades ---
 
-  void agregarUnidad(Unidad u) {
-    _unidades.add(u);
-    _guardarUnidades();
-    notifyListeners();
-  }
-
-  void actualizarUnidad(Unidad u) {
-    final index = _unidades.indexWhere((element) => element.id == u.id);
-    if (index != -1) {
-      _unidades[index] = u;
-      _guardarUnidades();
-      notifyListeners();
-    }
-  }
-
-  void eliminarUnidad(String id) {
-    // Si la unidad está asignada a un móvil, quitamos la asignación del móvil primero
-    final movilIndex = _moviles.indexWhere((m) => m.idUnidadAsignada == id);
-    if (movilIndex != -1) {
-      _moviles[movilIndex] = _moviles[movilIndex].copyWith(clearUnidad: true);
-      _guardarMoviles();
-    }
-    _unidades.removeWhere((element) => element.id == id);
-    _guardarUnidades();
-    notifyListeners();
-  }
 
   // --- Gestión de Móviles ---
 
-  void agregarMovil(Movil m) {
-    _moviles.add(m);
+  Future<void> agregarMovil(Movil m) async {
+    try {
+      final creado = await MovilService.crearMovil(m);
+      if (creado != null) {
+        _moviles.add(creado);
+      } else {
+        _moviles.add(m);
+      }
+    } catch (e) {
+      print('[DespachoController] Error al agregar móvil en backend: $e');
+      _moviles.add(m);
+    }
     _guardarMoviles();
     notifyListeners();
   }
 
-  void actualizarMovil(Movil m) {
+  Future<void> actualizarMovil(Movil m) async {
     final index = _moviles.indexWhere((element) => element.id == m.id);
     if (index != -1) {
-      _moviles[index] = m;
+      try {
+        final editado = await MovilService.actualizarMovil(m);
+        _moviles[index] = editado ?? m;
+      } catch (e) {
+        print('[DespachoController] Error al actualizar móvil en backend: $e');
+        _moviles[index] = m;
+      }
       _guardarMoviles();
       notifyListeners();
     }
   }
 
-  void eliminarMovil(String id) {
+  Future<void> eliminarMovil(String id) async {
     // Si el móvil está asignado a una unidad, quitamos la asignación de la unidad primero
     final unidadIndex = _unidades.indexWhere((u) => u.idMovilAsignado == id);
     if (unidadIndex != -1) {
       _unidades[unidadIndex] = _unidades[unidadIndex].copyWith(clearMovil: true);
       _guardarUnidades();
     }
-    _moviles.removeWhere((element) => element.id == id);
-    _guardarMoviles();
-    notifyListeners();
+    try {
+      await MovilService.eliminarMovil(id);
+      await cargarMoviles();
+    } catch (e) {
+      print('[DespachoController] Error al eliminar móvil en backend: $e');
+      _moviles.removeWhere((element) => element.id == id);
+      _guardarMoviles();
+      notifyListeners();
+    }
   }
 
   // --- Asignación Unidad <-> Móvil ---
@@ -472,15 +615,18 @@ class DespachoController extends ChangeNotifier {
     }
   }
 
-  void actualizarEstadoMovil(String idMovil, String nuevoEstado) {
+  void actualizarEstadoMovil(String idMovil, String nuevoEstado) async {
     final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
     if (mIndex != -1) {
       final movil = _moviles[mIndex];
+      final idEstado = getIdEstadoPorNombre(nuevoEstado);
       
+      Movil movilActualizado;
       if (nuevoEstado == 'Disponible' || nuevoEstado == 'Inactivo') {
         // Al quedar disponible o inactivo, se libera del incidente activo
-        _moviles[mIndex] = movil.copyWith(
+        movilActualizado = movil.copyWith(
           estado: nuevoEstado,
+          idmovilEstado: idEstado,
           clearIncidente: true,
           // Volver a la base/coordenadas por defecto
           latitud: movil.id == 'm1' ? -38.9515 : (movil.id == 'm2' ? -38.9580 : -38.9480),
@@ -506,15 +652,25 @@ class DespachoController extends ChangeNotifier {
           }
         }
       } else {
-        _moviles[mIndex] = movil.copyWith(estado: nuevoEstado);
+        movilActualizado = movil.copyWith(
+          estado: nuevoEstado,
+          idmovilEstado: idEstado,
+        );
       }
 
+      _moviles[mIndex] = movilActualizado;
       _guardarMoviles();
       notifyListeners();
+
+      try {
+        await MovilService.actualizarMovil(movilActualizado);
+      } catch (e) {
+        print('[DespachoController] Error al sincronizar estado de móvil con backend: $e');
+      }
     }
   }
 
-  void asignarMovilAVictima(int idIncidente, int idVictima, String? idMovil) {
+  void asignarMovilAVictima(int idIncidente, int idVictima, String? idMovil) async {
     if (idMovil == null) return;
 
     // 1. Encontrar el incidente y la víctima
@@ -529,37 +685,83 @@ class DespachoController extends ChangeNotifier {
     final vIndex = incident.victimas!.indexWhere((v) => v.idVictima == idVictima);
     if (vIndex == -1) return;
 
-    // Obtener asignación actual y añadir el ID del nuevo móvil si no existe ya
-    final currentAssigned = incident.victimas![vIndex].idMovilAsignado;
-    final List<String> list = currentAssigned != null && currentAssigned.isNotEmpty
-        ? currentAssigned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
-        : [];
-        
-    if (!list.contains(idMovil)) {
-      list.add(idMovil);
-    }
-    final nuevoString = list.join(',');
+    final victima = incident.victimas![vIndex];
+    final previousMovilId = victima.idMovilAsignado;
 
-    // 2. Actualizar el móvil asignado en la víctima
-    final victimaActualizada = incident.victimas![vIndex].copyWith(
-      idMovilAsignado: nuevoString,
+    // Si la víctima ya tenía un móvil asignado anterior (diferente al nuevo), liberarlo si no está en uso en otro lado
+    if (previousMovilId != null && previousMovilId.isNotEmpty && previousMovilId != idMovil) {
+      bool sigueEnUso = false;
+      for (var dem in _incidentesActivos) {
+        if (dem.incidente?.victimas != null) {
+          for (var vic in dem.incidente!.victimas!) {
+            if (vic.idVictima != idVictima && vic.idMovilAsignado == previousMovilId) {
+              sigueEnUso = true;
+              break;
+            }
+          }
+        }
+        if (sigueEnUso) break;
+      }
+
+      if (!sigueEnUso) {
+        final prevMIndex = _moviles.indexWhere((m) => m.id == previousMovilId);
+        if (prevMIndex != -1) {
+          _moviles[prevMIndex] = _moviles[prevMIndex].copyWith(
+            estado: 'Disponible',
+            clearIncidente: true,
+            latitud: previousMovilId == 'm1' ? -38.9515 : (previousMovilId == 'm2' ? -38.9580 : -38.9480),
+            longitud: previousMovilId == 'm1' ? -68.0610 : (previousMovilId == 'm2' ? -68.0520 : -68.0750),
+          );
+        }
+      }
+    }
+
+    // 2. Asignar ÚNICAMENTE el nuevo móvil (1 móvil por víctima)
+    final victimaActualizada = victima.copyWith(
+      idMovilAsignado: idMovil,
     );
     incident.victimas![vIndex] = victimaActualizada;
 
-    // 3. Poner el móvil en estado Despachado
+    // 3. Poner el móvil en estado Despachado y persistir
     final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
     if (mIndex != -1) {
       double offsetLat = 0.002;
       double offsetLng = 0.002;
       double destLat = (incident.latitud ?? -38.9516) + offsetLat;
       double destLng = (incident.longitud ?? -68.0591) + offsetLng;
+      final idEstadoDespachado = getIdEstadoPorNombre('Despachado');
 
-      _moviles[mIndex] = _moviles[mIndex].copyWith(
+      final movilActualizado = _moviles[mIndex].copyWith(
         estado: 'Despachado',
+        idmovilEstado: idEstadoDespachado,
         idIncidenteActivo: idIncidente,
         latitud: destLat,
         longitud: destLng,
       );
+
+      _moviles[mIndex] = movilActualizado;
+
+      try {
+        await MovilService.actualizarMovil(movilActualizado);
+      } catch (e) {
+        print('[DespachoController] Error al sincronizar despacho con backend: $e');
+      }
+
+      // 4. Crear registro en la tabla ser_sien_dsp_despacho enviando el idmovil en el campo idmovilunidad
+      final cleanIdMovil = movilActualizado.id.replaceAll(RegExp(r'[^0-9]'), '');
+      final idMovilInt = cleanIdMovil.isNotEmpty ? int.tryParse(cleanIdMovil) : null;
+
+      if (idMovilInt != null) {
+        try {
+          await DespachoService.registrarDespacho(
+            idVictima: idVictima,
+            idMovilUnidad: idMovilInt,
+            observacion: 'Despacho asignado desde RAPH Web para víctima #$idVictima',
+          );
+        } catch (e) {
+          print('[DespachoController] Error al registrar despacho en la tabla ser_sien_dsp_despacho: $e');
+        }
+      }
     }
 
     _guardarMoviles();
@@ -579,28 +781,18 @@ class DespachoController extends ChangeNotifier {
     final vIndex = incident.victimas!.indexWhere((v) => v.idVictima == idVictima);
     if (vIndex == -1) return;
 
-    // Obtener asignación actual y remover el ID del móvil especificado
-    final currentAssigned = incident.victimas![vIndex].idMovilAsignado;
-    if (currentAssigned == null || currentAssigned.isEmpty) return;
-
-    final List<String> list = currentAssigned.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    list.remove(idMovil);
-    final nuevoString = list.isNotEmpty ? list.join(',') : null;
-
-    // 2. Actualizar el móvil asignado en la víctima
+    // 2. Desasignar móvil de la víctima
     final victimaActualizada = incident.victimas![vIndex].copyWith(
-      idMovilAsignado: nuevoString,
-      clearMovil: nuevoString == null,
+      clearMovil: true,
     );
     incident.victimas![vIndex] = victimaActualizada;
 
-    // 3. Si el móvil ya no está asignado a ninguna víctima de los incidentes activos, liberarlo
+    // 3. Si el móvil ya no está asignado a ninguna otra víctima de los incidentes activos, liberarlo
     bool sigueEnUso = false;
     for (var dem in _incidentesActivos) {
       if (dem.incidente?.victimas != null) {
         for (var vic in dem.incidente!.victimas!) {
-          final vicAssigned = vic.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? [];
-          if (vicAssigned.contains(idMovil)) {
+          if (vic.idMovilAsignado == idMovil) {
             sigueEnUso = true;
             break;
           }

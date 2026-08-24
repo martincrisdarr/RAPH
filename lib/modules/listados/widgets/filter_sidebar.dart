@@ -172,7 +172,7 @@ class FilterSidebar extends StatelessWidget {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: value,
+              value: (value != null && items.contains(value)) ? value : null,
               hint: Text(hint, style: const TextStyle(color: Colors.white30, fontSize: 14)),
               isExpanded: true,
               dropdownColor: theme.colorScheme.surface,

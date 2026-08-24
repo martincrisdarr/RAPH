@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../config/auth_controller.dart';
 import '../../shared/components/custom_stepper.dart';
 import 'widgets/ingreso_section_card.dart';
@@ -275,7 +276,8 @@ class _IngresoPageState extends State<IngresoPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
+        return PointerInterceptor(
+          child: AlertDialog(
           backgroundColor: const Color(0xFF1E2429),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -389,7 +391,9 @@ class _IngresoPageState extends State<IngresoPage> {
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (context) => const Center(child: CircularProgressIndicator()),
+                  builder: (context) => PointerInterceptor(
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
                 );
 
                 try {
@@ -416,7 +420,7 @@ class _IngresoPageState extends State<IngresoPage> {
                   // 3. Guardar Víctimas y mapear reportes por idVictima
                   final Map<int, String> reportesVictimas = {};
                   for (var v in victimas) {
-                    if (v.nombre.isNotEmpty || v.dni.isNotEmpty || v.idConfGenero != null) {
+                    if (v.idVictima != null || v.nombre.trim().isNotEmpty || v.dni.trim().isNotEmpty) {
                       final payload = v.toVictima(idInc);
                       if (v.idVictima == null) {
                         final creadaV = await VictimaService.crear(payload);
@@ -477,10 +481,11 @@ class _IngresoPageState extends State<IngresoPage> {
               child: const Text('CONFIRMAR Y CERRAR', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildResumenDatosCargados(BuildContext context) {
     final controller = IngresoController();

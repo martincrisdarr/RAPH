@@ -9,6 +9,7 @@ import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
 import '../../../shared/services/socket_service.dart';
+import 'victima_sintomas_section.dart';
 
 class DatosVictimasSection extends StatefulWidget {
   final VoidCallback? onDespacho;
@@ -67,14 +68,7 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
     );
   }
 
-  final List<String> _etiquetasSintomas = [
-    'Dolor de pecho',
-    'Convulsiones',
-    'Intoxicación',
-    'Traumatismo',
-    'Dif. respiratoria',
-    'Inconsciencia',
-  ];
+
 
   @override
   void initState() {
@@ -418,7 +412,10 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
             absorbing: isLocked,
             child: Opacity(
               opacity: isLocked ? 0.6 : 1.0,
+              child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
               child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -556,19 +553,10 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                     const SizedBox(height: 12),
  
                     // Symptoms & Suggested assistance section
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 1,
-                          child: _buildBuscadorEtiquetasColumn(theme, index, victima),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          flex: 1,
-                          child: _buildPreguntasRecomendacionesBox(theme, victima),
-                        ),
-                      ],
+                    VictimaSintomasSection(
+                      key: ValueKey('sintomas_${victima.id}'),
+                      index: index,
+                      victima: victima,
                     ),
                     const SizedBox(height: 20),
                     const Divider(color: Colors.white10),
@@ -639,6 +627,7 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
               ),
             ),
           ),
+        ),
         ],
       ),
     );
@@ -708,159 +697,23 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   Widget _buildTriageOptionButton(int index, VictimaData victima, String code, Color color) {
     final isSelected = victima.codigoTriage == code;
-    return GestureDetector(
-      onTap: () => _ingresoController.updateVictima(index, codigoTriage: code),
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected ? color : color.withOpacity(0.2),
-          border: Border.all(color: color, width: 2),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => _ingresoController.updateVictima(index, codigoTriage: code),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isSelected ? color : color.withValues(alpha: 0.2),
+            border: Border.all(color: color, width: 2),
+          ),
+          child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
         ),
-        child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
       ),
     );
   }
 
-  Widget _buildBuscadorEtiquetasColumn(ThemeData theme, int index, VictimaData victima) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextFormField(
-          key: ValueKey('search_${victima.id}'),
-          initialValue: victima.busqueda,
-          decoration: InputDecoration(
-            labelText: 'Buscar síntoma o afección',
-            prefixIcon: const Icon(Icons.search, size: 20),
-            suffixIcon: victima.busqueda.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear, size: 20),
-                    onPressed: () {
-                      setState(() {
-                        victima.busqueda = '';
-                      });
-                    },
-                  )
-                : null,
-          ),
-          onChanged: (val) {
-            victima.busqueda = val;
-            setState(() {});
-          },
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _etiquetasSintomas.map((etiqueta) {
-            bool isSelected = victima.sintomasSeleccionados.contains(etiqueta);
-            return ActionChip(
-              label: Text(etiqueta),
-              backgroundColor: isSelected ? theme.colorScheme.primary.withOpacity(0.2) : theme.colorScheme.surface,
-              side: BorderSide(color: isSelected ? theme.colorScheme.primary : Colors.white24),
-              onPressed: () {
-                final list = List<String>.from(victima.sintomasSeleccionados);
-                if (isSelected) {
-                  list.remove(etiqueta);
-                } else {
-                  list.add(etiqueta);
-                }
-                _ingresoController.updateVictima(index, sintomas: list);
-              },
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildPreguntasRecomendacionesBox(ThemeData theme, VictimaData victima) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: victima.sintomasSeleccionados.isNotEmpty || victima.busqueda.isNotEmpty
-          ? _buildPreguntasSintomas(theme, victima)
-          : const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'Seleccione un síntoma o busque\npara ver el proceso de asistencia',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white38, fontSize: 13),
-                ),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildPreguntasSintomas(ThemeData theme, VictimaData victima) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: const BoxDecoration(
-            color: Colors.black26,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.assignment, size: 20, color: Colors.blueAccent),
-              const SizedBox(width: 8),
-              Text(
-                'Asistencia sugerida',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              _buildPreguntaItem(theme, '¿El paciente está consciente?'),
-              const SizedBox(height: 8),
-              _buildPreguntaItem(theme, '¿Respira con normalidad?'),
-              const SizedBox(height: 8),
-              _buildPreguntaItem(theme, '¿Tiene pulso palpable?'),
-              if (victima.sintomasSeleccionados.contains('Dolor de pecho')) ...[
-                const SizedBox(height: 8),
-                _buildPreguntaItem(theme, '¿El dolor se irradia al brazo o mandíbula?'),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPreguntaItem(ThemeData theme, String pregunta) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black12,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          Expanded(child: Text(pregunta, style: const TextStyle(fontSize: 13))),
-          const SizedBox(width: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ChoiceChip(label: const Text('Sí'), selected: false, onSelected: (_) {}),
-              const SizedBox(width: 4),
-              ChoiceChip(label: const Text('No'), selected: false, onSelected: (_) {}),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
