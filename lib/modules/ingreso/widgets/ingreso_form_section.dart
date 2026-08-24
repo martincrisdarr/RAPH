@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../shared/components/custom_select.dart';
+import '../../../shared/components/skeleton_box.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
 import '../../../shared/services/demanda_recibida_service.dart';
@@ -64,8 +65,8 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
     super.dispose();
   }
 
-  static const _tableColumns = ['ID', 'Fecha', 'Tipo', 'Dirección', 'Estado'];
-  static const _tableColumnFlex = [1, 2, 2, 4, 2];
+  static const _tableColumns = ['ID', 'Fecha', 'Tipo', 'Dirección'];
+  static const _tableColumnFlex = [1, 2, 2, 5];
 
   Timer? _debounceTimer;
 
@@ -100,7 +101,17 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
             Expanded(
               child: CustomSelect<Configuracion>(
                 label: 'Ingreso',
-                fetchItems: () => ConfiguracionService.obtenerTiposIngreso(),
+                fetchItems: () async {
+                  final tipos = await ConfiguracionService.obtenerTiposIngreso();
+                  if (_ingresoController.demandaActual.idCfgTipoIngreso == null && tipos.isNotEmpty) {
+                    final nuevoItem = tipos.firstWhere(
+                      (t) => t.descripcion.toUpperCase().contains('NUEVO'),
+                      orElse: () => tipos.first,
+                    );
+                    _ingresoController.updateDemanda(idCfgTipoIngreso: nuevoItem.idconfiguracion);
+                  }
+                  return tipos;
+                },
                 itemLabel: (item) => item.descripcion,
                 initialSelectionId: _ingresoController.demandaActual.idCfgTipoIngreso,
                 matchById: (item) => item.idconfiguracion,
@@ -266,35 +277,6 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      await _ingresoController.prepararNuevoIncidente();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Se desvinculó del incidente y se inició uno nuevo.'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.link_off_rounded, size: 16),
-                    label: const Text(
-                      'DESVINCULAR / CREAR NUEVO',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: const BorderSide(color: Colors.redAccent, width: 1),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -505,7 +487,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
           // Rows
           Expanded(
             child: _cargandoListado
-                ? const Center(child: CircularProgressIndicator())
+                ? _buildIncidentesSkeleton(theme)
                 : _demandasRecientes.isEmpty
                     ? const Center(
                         child: Text(
@@ -515,7 +497,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
                       )
                     : ListView.separated(
                         itemCount: _demandasRecientes.length,
-                        separatorBuilder: (_, __) => const Divider(
+                        separatorBuilder: (_, _) => const Divider(
                           height: 1,
                           color: Colors.white10,
                         ),
@@ -533,14 +515,47 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
     );
   }
 
+  Widget _buildIncidentesSkeleton(ThemeData theme) {
+    return ListView.separated(
+      itemCount: 6,
+      separatorBuilder: (_, _) => const Divider(
+        height: 1,
+        color: Colors.white10,
+      ),
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                flex: _tableColumnFlex[0],
+                child: const SkeletonBox(width: 30, height: 14),
+              ),
+              Expanded(
+                flex: _tableColumnFlex[1],
+                child: const SkeletonBox(width: 75, height: 14),
+              ),
+              Expanded(
+                flex: _tableColumnFlex[2],
+                child: const SkeletonBox(width: 65, height: 14),
+              ),
+              Expanded(
+                flex: _tableColumnFlex[3],
+                child: const SkeletonBox(width: 160, height: 14),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
   Widget _buildIncidenteRow(
     ThemeData theme,
     DemandaRecibida demanda,
     List<int> flex,
   ) {
-    final estado = demanda.estado?.descripcion ?? 'DESCONOCIDO';
-    final estadoColor = _estadoColor(estado);
-    
     String fechaStr = '--/-- --:--';
     if (demanda.fechaHora != null) {
       final f = demanda.fechaHora!;
@@ -613,52 +628,10 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Estado
-              Expanded(
-                flex: flex[4],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  constraints: const BoxConstraints(maxWidth: 100),
-                  decoration: BoxDecoration(
-                    color: estadoColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: estadoColor.withValues(alpha: 0.4)),
-                  ),
-                  child: Text(
-                    estado,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: estadoColor,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  Color _estadoColor(String estado) {
-    final upperEstado = estado.toUpperCase();
-    switch (upperEstado) {
-      case 'ABIERTA':
-      case 'INGRESO':
-        return const Color(0xFF64B5F6); // blue
-      case 'DESPACHO':
-        return const Color(0xFFFFB74D); // amber
-      case 'EN SITIO':
-        return const Color(0xFF4FC3F7); // light blue
-      case 'TRASLADO':
-        return const Color(0xFF81C784); // green
-      case 'ACTIVO':
-        return const Color(0xFFE57373); // red
-      default:
-        return Colors.white38;
-    }
   }
 }

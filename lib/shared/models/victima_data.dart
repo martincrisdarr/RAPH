@@ -16,13 +16,26 @@ class VictimaData {
   String observaciones = '';
   String? idMovilAsignado;
   String? reporte;
+  int? idVictimaEvaluacion;
+  int? idSintomaSeleccionadoId;
+  int? idVictimaSintomaActivo;
 
   Victima toVictima(int? idIncidente) {
+    int? idConfCodigo;
+    if (codigoTriage == 'Rojo') {
+      idConfCodigo = 29;
+    } else if (codigoTriage == 'Amarillo') {
+      idConfCodigo = 30;
+    } else if (codigoTriage == 'Verde') {
+      idConfCodigo = 31;
+    }
+
     return Victima(
       idVictima: idVictima,
       nombresApellidos: nombre.isNotEmpty ? nombre : null,
       dni: int.tryParse(dni),
       idConfGenero: idConfGenero,
+      idConfCodigo: idConfCodigo,
       edad: int.tryParse(edad),
       estadoActual: sintomasSeleccionados.isNotEmpty
           ? sintomasSeleccionados.join(', ')
@@ -74,6 +87,15 @@ class VictimaData {
     v.observaciones = victima.observaciones ?? '';
     v.idMovilAsignado = victima.idMovilAsignado;
     v.reporte = victima.reporte;
+
+    if (victima.idConfCodigo == 29) {
+      v.codigoTriage = 'Rojo';
+    } else if (victima.idConfCodigo == 30) {
+      v.codigoTriage = 'Amarillo';
+    } else if (victima.idConfCodigo == 31) {
+      v.codigoTriage = 'Verde';
+    }
+
     if (victima.estadoActual != null && victima.estadoActual!.isNotEmpty) {
       v.sintomasSeleccionados = victima.estadoActual!.split(',').map((s) => s.trim()).toList();
     }

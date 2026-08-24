@@ -29,7 +29,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
     {'nombre': 'Incendio', 'color': Colors.red.shade400},
     {'nombre': 'Accidente Industrial', 'color': Colors.red.shade400},
   ];
-  final List<String> _protocolosSeleccionados = [];
+
 
   @override
   void initState() {
@@ -160,7 +160,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
               children: _protocolosSugeridos.map((protoData) {
                 final protocolo = protoData['nombre'] as String;
                 final color = protoData['color'] as Color;
-                final isSelected = _protocolosSeleccionados.contains(protocolo);
+                final isSelected = _ingresoController.protocolosSeleccionados.contains(protocolo);
                 
                 return ActionChip(
                   label: Text(
@@ -179,13 +179,21 @@ class _IncidenteSectionState extends State<IncidenteSection> {
                   ),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   onPressed: () {
-                    setState(() {
-                      if (isSelected) {
-                        _protocolosSeleccionados.remove(protocolo);
-                      } else {
-                        _protocolosSeleccionados.add(protocolo);
-                      }
-                    });
+                    final current = List<String>.from(_ingresoController.protocolosSeleccionados);
+                    if (current.contains(protocolo)) {
+                      current.remove(protocolo);
+                    } else {
+                      current.add(protocolo);
+                    }
+                    _ingresoController.protocolosSeleccionados = current;
+
+                    if (current.isNotEmpty) {
+                      _ingresoController.updateIncidente(codigoTriage: 'Rojo');
+                      _ingresoController.updateTodasLasVictimas(codigoTriage: 'Rojo');
+                    } else {
+                      _ingresoController.updateIncidente(codigoTriage: '');
+                      _ingresoController.updateTodasLasVictimas(codigoTriage: '');
+                    }
                   },
                 );
               }).toList(),
@@ -228,7 +236,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
               ),
             ),
           ),
-          if (widget.onDespacho != null) ...[
+          if (widget.onDespacho != null && (_ingresoController.incidenteActual.codigoTriage == 'Rojo' || _ingresoController.protocolosSeleccionados.isNotEmpty)) ...[
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
@@ -252,28 +260,15 @@ class _IncidenteSectionState extends State<IncidenteSection> {
   }
 
   Widget _buildTriageBanner(ThemeData theme) {
-    Color codeColor;
-    String codeText;
-
     final codigoTriage = _ingresoController.incidenteActual.codigoTriage;
+    final esRojo = codigoTriage == 'Rojo' || _ingresoController.protocolosSeleccionados.isNotEmpty;
 
-    switch (codigoTriage) {
-      case 'Rojo':
-        codeColor = Colors.red.shade600;
-        codeText = 'ROJO - EMERGENCIA CRÍTICA';
-        break;
-      case 'Amarillo':
-        codeColor = Colors.yellow.shade700;
-        codeText = 'AMARILLO - URGENCIA';
-        break;
-      case 'Verde':
-        codeColor = Colors.green.shade600;
-        codeText = 'VERDE - NO URGENTE';
-        break;
-      default:
-        codeColor = Colors.white24;
-        codeText = 'SIN CÓDIGO';
+    if (!esRojo) {
+      return const SizedBox.shrink();
     }
+
+    final codeColor = Colors.red.shade600;
+    const codeText = 'ROJO - EMERGENCIA CRÍTICA';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -290,47 +285,13 @@ class _IncidenteSectionState extends State<IncidenteSection> {
             child: Text(
               'CÓDIGO INCIDENTE: $codeText',
               style: theme.textTheme.titleMedium?.copyWith(
-                color: codeColor == Colors.white24 ? Colors.white : codeColor,
+                color: codeColor,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.1,
               ),
             ),
           ),
-          _buildTriageSelector(codigoTriage),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTriageSelector(String? currentCode) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildTriageOptionButton(currentCode, 'Verde', Colors.green),
-        const SizedBox(width: 8),
-        _buildTriageOptionButton(currentCode, 'Amarillo', Colors.yellow),
-        const SizedBox(width: 8),
-        _buildTriageOptionButton(currentCode, 'Rojo', Colors.red),
-      ],
-    );
-  }
-
-  Widget _buildTriageOptionButton(String? currentCode, String code, Color color) {
-    final isSelected = currentCode == code;
-    return GestureDetector(
-      onTap: () {
-        _ingresoController.updateIncidente(codigoTriage: code);
-        setState(() {});
-      },
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected ? color : color.withValues(alpha: 0.2),
-          border: Border.all(color: color, width: 2),
-        ),
-        child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
       ),
     );
   }

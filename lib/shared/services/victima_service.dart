@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/victima.dart';
 import '../../config/auth_controller.dart';
 
 class VictimaService {
   static const String _baseUrl =
-      'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_victima';
+      '${ApiConfig.baseUrl}/ser_sien_dsp_victima';
 
   static Map<String, String> _getHeaders() {
     final token = RaphAuthController.instance.token;

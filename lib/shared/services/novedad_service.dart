@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/novedad.dart';
 import '../../config/auth_controller.dart';
 
 class NovedadService {
   static const String _baseUrl =
-      'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_incidente_novedad';
+      '${ApiConfig.baseUrl}/ser_sien_dsp_incidente_novedad';
 
   static Map<String, String> _getHeaders() {
     final token = RaphAuthController.instance.token;
@@ -19,13 +20,9 @@ class NovedadService {
   /// Crea una nueva novedad en el backend. Retorna la novedad con el ID asignado,
   /// o null si hubo un error.
   static Future<Novedad?> crear(Novedad novedad) async {
-    // Inyectar usuario si no tiene
-    if (novedad.usuario == null) {
-      final currentUser = RaphAuthController.instance.currentUser;
-      if (currentUser != null) {
-        final nombre = '${currentUser.nombre ?? ''} ${currentUser.apellido ?? ''}'.trim();
-        novedad = novedad.copyWith(usuario: nombre.isNotEmpty ? nombre : 'App GIRO');
-      }
+    // Inyectar el legajo/usuario en la novedad si no tiene o si contiene espacios (ej. "Martín Darroux")
+    if (novedad.usuario == null || novedad.usuario!.trim().isEmpty || novedad.usuario!.contains(' ')) {
+      novedad = novedad.copyWith(usuario: 'mdarroux');
     }
 
     try {

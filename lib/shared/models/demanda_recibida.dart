@@ -58,9 +58,6 @@ class DemandaRecibida {
     if (dni != null) map['dni'] = dni;
     if (idCfgEstado != null) map['idcfg_estado'] = idCfgEstado;
     if (idIncidente != null) map['idincidente'] = idIncidente;
-    if (estado != null) map['estado'] = estado?.toJson();
-    if (tipoIngreso != null) map['tipo_ingreso'] = tipoIngreso?.toJson();
-    if (incidente != null) map['incidente'] = incidente?.toJson();
     return map;
   }
   

@@ -18,14 +18,46 @@ class Unidad {
   });
 
   factory Unidad.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic>? uObj = json['unidad'] is Map<String, dynamic> ? json['unidad'] : null;
+    final Map<String, dynamic>? mObj = json['movil'] is Map<String, dynamic> ? json['movil'] : null;
+    final Map<String, dynamic>? tObj = json['tipo_unidad'] is Map<String, dynamic> ? json['tipo_unidad'] : null;
+
+    final String parsedId = (json['idmovilunidad'] ?? json['idunidad'] ?? uObj?['id_unidad'] ?? json['id'] ?? '').toString();
+    final String idUnidadReal = (json['idunidad'] ?? uObj?['id_unidad'] ?? parsedId).toString();
+
+    final String parsedPatente = (json['patente'] ?? uObj?['patente'] ?? '').toString();
+    final String parsedMarca = (json['marca'] ?? uObj?['marca'] ?? '').toString();
+    final String parsedModelo = (json['modelo'] ?? uObj?['modelo'] ?? '').toString();
+    final String parsedTipo = (json['tipo'] ?? tObj?['nombre'] ?? uObj?['tipo'] ?? 'Alta Complejidad').toString();
+
+    final int activoInt = json['activo'] is int
+        ? json['activo']
+        : (json['activo'] == true || json['activo'] == 1 ? 1 : 0);
+    final String parsedEstado = json['estado'] ?? (activoInt == 1 ? 'Activo' : 'Fuera de Servicio');
+    final String? parsedMovilId = (json['idMovilAsignado'] ?? json['idmovil'] ?? mObj?['idmovil'])?.toString();
+
+    final String finalMarca = parsedMarca.isNotEmpty
+        ? parsedMarca
+        : (mObj != null && mObj['nombre'] != null && (mObj['nombre'] as String).isNotEmpty
+            ? 'Vehículo (${mObj['nombre']})'
+            : 'Unidad Vehicular');
+
+    final String finalModelo = parsedModelo.isNotEmpty
+        ? parsedModelo
+        : 'ID #$idUnidadReal';
+
+    final String finalPatente = parsedPatente.isNotEmpty
+        ? parsedPatente
+        : 'U-$idUnidadReal';
+
     return Unidad(
-      id: json['id'] ?? '',
-      patente: json['patente'] ?? '',
-      marca: json['marca'] ?? '',
-      modelo: json['modelo'] ?? '',
-      tipo: json['tipo'] ?? 'Baja Complejidad',
-      estado: json['estado'] ?? 'Activo',
-      idMovilAsignado: json['idMovilAsignado'],
+      id: parsedId,
+      patente: finalPatente,
+      marca: finalMarca,
+      modelo: finalModelo,
+      tipo: parsedTipo,
+      estado: parsedEstado,
+      idMovilAsignado: parsedMovilId,
     );
   }
 

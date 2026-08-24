@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+import '../models/configuracion.dart';
 import '../models/demanda_recibida.dart';
 import '../models/incidente.dart';
 import '../../config/auth_controller.dart';
 
 class DemandaRecibidaService {
-  static const String _baseUrl = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_demanda_recibida';
+  static const String _baseUrl = '${ApiConfig.baseUrl}/ser_sien_dsp_demanda_recibida';
 
   static Map<String, String> _getHeaders() {
     final token = RaphAuthController.instance.token;
@@ -18,13 +20,9 @@ class DemandaRecibidaService {
 
   static Future<DemandaRecibida?> crear(DemandaRecibida demanda) async {
     try {
-      // Inyectar el nombre del usuario logueado en la demanda si no tiene
-      if (demanda.usuario == null) {
-        final currentUser = RaphAuthController.instance.currentUser;
-        if (currentUser != null) {
-          final nombreCompleto = '${currentUser.nombre ?? ''} ${currentUser.apellido ?? ''}'.trim();
-          demanda = demanda.copyWith(usuario: nombreCompleto.isNotEmpty ? nombreCompleto : 'App GIRO');
-        }
+      // Inyectar el legajo/usuario en la demanda si no tiene
+      if (demanda.usuario == null || demanda.usuario!.contains(' ')) {
+        demanda = demanda.copyWith(usuario: 'mdarroux');
       }
 
       final response = await http.post(
@@ -75,56 +73,74 @@ class DemandaRecibidaService {
 
   static Future<List<DemandaRecibida>> obtenerRecientes({DateTime? fecha, String? direccion}) async {
     try {
-      // Endpoint específico para incidentes recientes
-      final baseIncidenteUrl = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web/ser_sien_dsp_incidente/recientes?expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
-      var urlStr = baseIncidenteUrl;
-      
-      bool hasQuery = true;
-      int filterIndex = 0;
+      // 1. Petición al endpoint principal de demandas recibidas
+      var urlStr = '$_baseUrl?expand=estado,tipo_ingreso,incidente';
+
       if (direccion != null && direccion.isNotEmpty) {
         urlStr += '&filter%5Bdireccion%5D%5Blike%5D=${Uri.encodeComponent(direccion)}';
-        filterIndex++;
-        hasQuery = true;
       }
 
       if (fecha != null) {
         final f = fecha;
         final fechaStr = '${f.year}-${f.month.toString().padLeft(2, '0')}-${f.day.toString().padLeft(2, '0')}';
-        urlStr += (hasQuery ? '&' : '?') + 'filter%5Band%5D%5B$filterIndex%5D%5Bfechahoraauto%5D%5Blike%5D=${Uri.encodeComponent(fechaStr)}';
+        urlStr += '&filter%5Bfechahora%5D%5Blike%5D=${Uri.encodeComponent(fechaStr)}';
       }
 
-      final url = Uri.parse(urlStr);
-      final response = await http.get(url, headers: _getHeaders());
+      final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          return data.map<DemandaRecibida>((j) => DemandaRecibida.fromJson(j)).toList();
+        }
+      }
+
+      // 2. Fallback al endpoint de incidentes recientes si el principal no devolvió resultados
+      final baseIncidenteUrl = '${ApiConfig.baseUrl}/ser_sien_dsp_incidente/recientes?expand=ultimoEstadoRel.estadoRel';
+      final responseInc = await http.get(Uri.parse(baseIncidenteUrl), headers: _getHeaders());
+      if (responseInc.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(responseInc.body);
         return data.map<DemandaRecibida>((j) {
-          // El JSON de este endpoint usa 'idincidente' (sin guión bajo)
-          final idIncidente = j['idincidente'];
-          
-          return DemandaRecibida(
-            idDemandaRecibida: idIncidente,
-            fechaHora: j['fechahoraauto'] != null ? DateTime.tryParse(j['fechahoraauto']) : null,
-            incidente: Incidente(
+          if (j is Map<String, dynamic>) {
+            if (j.containsKey('iddemandarecibida')) {
+              return DemandaRecibida.fromJson(j);
+            }
+            final idIncidente = j['idincidente'] != null ? int.tryParse(j['idincidente'].toString()) : null;
+            final estadoMap = j['ultimoEstadoRel'] != null && j['ultimoEstadoRel']['estadoRel'] != null
+                ? j['ultimoEstadoRel']['estadoRel']
+                : j['estado'];
+
+            return DemandaRecibida(
+              idDemandaRecibida: idIncidente ?? (j['iddemandarecibida'] != null ? int.tryParse(j['iddemandarecibida'].toString()) : null),
               idIncidente: idIncidente,
-              direccion: j['direccion'] ?? 'No especificada',
-              latitud: j['latitud'] != null ? double.tryParse(j['latitud'].toString()) : null,
-              longitud: j['longitud'] != null ? double.tryParse(j['longitud'].toString()) : null,
-              direccionAuto: j['direccion_auto'],
-            ),
-          );
+              fechaHora: (j['fechahoraauto'] ?? j['fechahora']) != null ? DateTime.tryParse((j['fechahoraauto'] ?? j['fechahora']).toString()) : null,
+              estado: estadoMap != null ? Configuracion.fromJson(estadoMap) : null,
+              tipoIngreso: j['tipo_ingreso'] != null ? Configuracion.fromJson(j['tipo_ingreso']) : null,
+              incidente: j['incidente'] != null
+                  ? Incidente.fromJson(j['incidente'])
+                  : Incidente(
+                      idIncidente: idIncidente,
+                      direccion: j['direccion'] ?? j['direccion_auto'] ?? 'No especificada',
+                      latitud: j['latitud'] != null ? double.tryParse(j['latitud'].toString()) : null,
+                      longitud: j['longitud'] != null ? double.tryParse(j['longitud'].toString()) : null,
+                      direccionAuto: j['direccion_auto'],
+                    ),
+            );
+          }
+          return DemandaRecibida();
         }).toList();
       }
+
       return [];
     } catch (e) {
-      print('Excepcion en obtenerRecientes (Incidente): $e');
+      print('Excepcion en obtenerRecientes: $e');
       return [];
     }
   }
 
   static Future<DemandaRecibida?> obtenerPorIncidente(int idIncidente) async {
     try {
-      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades';
       final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {
@@ -142,7 +158,7 @@ class DemandaRecibidaService {
 
   static Future<List<DemandaRecibida>> obtenerTodasPorIncidente(int idIncidente) async {
     try {
-      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas,incidente.novedades';
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades';
       final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {
@@ -153,6 +169,22 @@ class DemandaRecibidaService {
     } catch (e) {
       print('Error en obtenerTodasPorIncidente: $e');
       return [];
+    }
+  }
+
+  static Future<DemandaRecibida?> obtenerPorId(int idDemandaRecibida) async {
+    try {
+      final urlStr = '$_baseUrl/$idDemandaRecibida?expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades';
+      final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return DemandaRecibida.fromJson(data);
+      }
+      return null;
+    } catch (e) {
+      print('Error en obtenerPorId: $e');
+      return null;
     }
   }
 }

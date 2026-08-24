@@ -62,14 +62,18 @@ class _ResumenVictimasSectionState extends State<ResumenVictimasSection> {
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: victimas.length,
-      separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 32),
-      itemBuilder: (context, index) {
-        final victima = victimas[index];
-        return _buildVictimaTile(theme, index + 1, victima);
-      },
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: victimas.length,
+        separatorBuilder: (context, index) => const Divider(color: Colors.white10, height: 32),
+        itemBuilder: (context, index) {
+          final victima = victimas[index];
+          return _buildVictimaTile(theme, index + 1, victima);
+        },
+      ),
     );
   }
 

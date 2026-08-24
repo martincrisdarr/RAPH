@@ -143,17 +143,38 @@ class _KanbanCardState extends State<KanbanCard> {
                 ],
               ),
               const SizedBox(height: 12),
-              Text(
-                widget.title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.location_on_rounded,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 widget.subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.white70,
+                  height: 1.3,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               if (widget.globalStatus != 'Llamada recibida') ...[
                 const SizedBox(height: 16),

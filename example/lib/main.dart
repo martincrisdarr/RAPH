@@ -4,17 +4,28 @@ import 'package:http/http.dart' as http;
 import 'package:raph/raph.dart';
 import 'package:user_session_contract/user_session_contract.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 // AutoLoginSession simulating the IUserSession from Portal
 class AutoLoginSession implements IUserSession {
   final UserData _user;
   final String _token;
+  final VoidCallback? _onLogout;
 
-  AutoLoginSession(this._user, this._token);
+  AutoLoginSession(this._user, this._token, {VoidCallback? onLogout}) : _onLogout = onLogout;
 
   @override bool get estaLogueado => true;
   @override String get token => _token;
   @override UserData get usuario => _user;
-  @override Future<void> logout() async => debugPrint("Simulated Logout");
+  @override
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('dev_token');
+    await prefs.remove('dev_user_nombre');
+    await prefs.remove('dev_user_apellido');
+    await prefs.remove('dev_user_email');
+    _onLogout?.call();
+  }
 }
 
 void main() async {
@@ -35,6 +46,29 @@ class _DevLoginAppState extends State<DevLoginApp> {
   final _passController = TextEditingController(text: '');
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStoredSession();
+  }
+
+  Future<void> _checkStoredSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('dev_token');
+    if (token != null && token.isNotEmpty) {
+      final nombre = prefs.getString('dev_user_nombre') ?? '';
+      final apellido = prefs.getString('dev_user_apellido') ?? '';
+      final email = prefs.getString('dev_user_email') ?? '';
+      setState(() {
+        _session = AutoLoginSession(
+          UserData(nombre: nombre, apellido: apellido, email: email),
+          token,
+          onLogout: () => setState(() => _session = null),
+        );
+      });
+    }
+  }
 
   Future<void> _login() async {
     final username = _userController.text.trim();
@@ -73,8 +107,19 @@ class _DevLoginAppState extends State<DevLoginApp> {
           );
           final token = data['token']?.toString() ?? '';
 
+          // Persistir sesión localmente para recargas de página (F5 / Shift+R / R)
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('dev_token', token);
+          await prefs.setString('dev_user_nombre', simulatedUser.nombre);
+          await prefs.setString('dev_user_apellido', simulatedUser.apellido);
+          await prefs.setString('dev_user_email', simulatedUser.email);
+
           setState(() {
-            _session = AutoLoginSession(simulatedUser, token);
+            _session = AutoLoginSession(
+              simulatedUser,
+              token,
+              onLogout: () => setState(() => _session = null),
+            );
           });
           return;
         }
@@ -153,6 +198,14 @@ class _DevLoginAppState extends State<DevLoginApp> {
                   const SizedBox(height: 24),
                   TextField(
                     controller: _userController,
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) {
+                      if (_passController.text.isNotEmpty) {
+                        if (!_isLoading) _login();
+                      } else {
+                        FocusScope.of(context).nextFocus();
+                      }
+                    },
                     decoration: const InputDecoration(
                       labelText: 'Usuario',
                       border: OutlineInputBorder(),
@@ -163,6 +216,10 @@ class _DevLoginAppState extends State<DevLoginApp> {
                   TextField(
                     controller: _passController,
                     obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (!_isLoading) _login();
+                    },
                     decoration: const InputDecoration(
                       labelText: 'Contraseña',
                       border: OutlineInputBorder(),
