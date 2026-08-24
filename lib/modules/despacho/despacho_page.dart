@@ -410,6 +410,7 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                         child: InkWell(
                           borderRadius: BorderRadius.circular(AppRadii.md),
                           onTap: () {
+                            _controller.cargarMoviles();
                             setState(() {
                               _selectedIncident = demanda;
                               // Si tiene coordenadas, centrar mapa
@@ -510,6 +511,7 @@ Widget _buildMapContainer(ThemeData theme) {
                     moviles: _controller.moviles,
                     selectedIncident: _selectedIncident,
                     onSelectIncident: (inc) {
+                      _controller.cargarMoviles();
                       setState(() {
                         _selectedIncident = inc;
                         _selectedMovil = null;
@@ -543,6 +545,7 @@ Widget _buildMapContainer(ThemeData theme) {
               title: 'Incidente: ${inc.direccion ?? 'Sin dirección'}',
             ),
             onTap: () {
+              _controller.cargarMoviles();
               setState(() {
                 _selectedIncident = demanda;
               });
@@ -658,9 +661,17 @@ Widget _buildMapContainer(ThemeData theme) {
         .expand((v) => v.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? <String>[])
         .toSet();
 
-    // Obtener móviles disponibles para despachar (tienen vehículo asignado, no están inactivos y no están ocupados por otra víctima)
+    // Obtener móviles disponibles para despachar (idmovil_estado == 1 o "Disponible", activos y no asignados a otra víctima)
     final despachables = _controller.moviles.where((m) {
-      return m.idUnidadAsignada != null && m.estado != 'Inactivo' && !assignedMobileIds.contains(m.id);
+      if (m.activo == 0) return false;
+      final esDisponible = m.idmovilEstado == 1 || m.estado.toLowerCase() == 'disponible';
+      if (!esDisponible) return false;
+      
+      final cleanId = m.id.replaceAll(RegExp(r'[^0-9]'), '');
+      if (assignedMobileIds.contains(m.id) || (cleanId.isNotEmpty && assignedMobileIds.contains(cleanId))) {
+        return false;
+      }
+      return true;
     }).toList();
 
     final idIncidenteActual = inc.idIncidente ?? demanda.idDemandaRecibida!;
@@ -861,17 +872,26 @@ Widget _buildMapContainer(ThemeData theme) {
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(width: 6),
-                                          IconButton(
-                                            icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white54),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                            tooltip: 'Liberar / Desasignar móvil',
+                                          const SizedBox(width: 8),
+                                          OutlinedButton.icon(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.accentRed,
+                                              side: BorderSide(color: AppColors.accentRed.withOpacity(0.6)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              minimumSize: const Size(0, 26),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
+                                            icon: const Icon(Icons.cancel_outlined, size: 13),
+                                            label: const Text(
+                                              'CANCELAR DESPACHO',
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                            ),
                                             onPressed: () {
                                               _controller.removerMovilDeVictima(
                                                 idIncidenteActual,
                                                 v.idVictima!,
                                                 movilAsignado.id,
+                                                idDespacho: v.idDespacho,
                                               );
                                             },
                                           ),
@@ -910,14 +930,44 @@ Widget _buildMapContainer(ThemeData theme) {
                       const SizedBox(height: 10),
                       if (!isAssigned) ...[
                         if (despachables.isEmpty) ...[
-                          const Text(
-                            'No hay móviles disponibles',
-                            style: TextStyle(color: Colors.white24, fontSize: 11, fontStyle: FontStyle.italic),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'No hay móviles disponibles',
+                                  style: TextStyle(color: Colors.white38, fontSize: 11, fontStyle: FontStyle.italic),
+                                ),
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 24)),
+                                icon: const Icon(Icons.refresh_rounded, size: 13, color: AppColors.accentBlue),
+                                label: const Text('Cargar móviles', style: TextStyle(color: AppColors.accentBlue, fontSize: 11)),
+                                onPressed: () => _controller.cargarMoviles(),
+                              ),
+                            ],
                           ),
                         ] else ...[
-                          const Text(
-                            'Despachar móvil:',
-                            style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Despachar móvil:',
+                                style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                              InkWell(
+                                onTap: () => _controller.cargarMoviles(),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.refresh_rounded, size: 12, color: AppColors.accentBlue),
+                                      SizedBox(width: 4),
+                                      Text('Actualizar listado', style: TextStyle(color: AppColors.accentBlue, fontSize: 10.5)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           ...despachables.map((m) {

@@ -58,4 +58,25 @@ class DespachoService {
       return null;
     }
   }
+
+  /// Cancelar / Eliminar un despacho por iddespacho (DELETE)
+  static Future<bool> cancelarDespacho(int idDespacho) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$_endpoint/$idDespacho'),
+        headers: _getHeaders(),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        print('[DespachoService] Despacho $idDespacho eliminado correctamente.');
+        return true;
+      } else {
+        print('[DespachoService] Error al eliminar despacho $idDespacho: status ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('[DespachoService] Excepción al eliminar despacho: $e');
+      return false;
+    }
+  }
 }

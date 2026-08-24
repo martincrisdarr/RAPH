@@ -11,6 +11,7 @@ class Victima {
   final DateTime? fechahoraConfirmaDespacho;
   final String? observaciones;
   final String? idMovilAsignado;
+  final int? idDespacho;
   final String? reporte;
 
   Victima({
@@ -26,6 +27,7 @@ class Victima {
     this.fechahoraConfirmaDespacho,
     this.observaciones,
     this.idMovilAsignado,
+    this.idDespacho,
     this.reporte,
   });
 
@@ -52,8 +54,9 @@ class Victima {
       if (personaSinDni['idconf_genero'] != null) idConfGenero = int.tryParse(personaSinDni['idconf_genero'].toString());
     }
 
+    int? idDespacho = json['iddespacho'] != null ? int.tryParse(json['iddespacho'].toString()) : null;
     String? idMovilAsignado = json['id_movil_asignado']?.toString();
-    if ((idMovilAsignado == null || idMovilAsignado.isEmpty) && json['despachos'] is List) {
+    if (json['despachos'] is List) {
       final despachosList = json['despachos'] as List;
       final activos = despachosList.where((d) {
         if (d is Map) {
@@ -65,10 +68,15 @@ class Victima {
 
       final despachoActivo = activos.isNotEmpty ? activos.last : (despachosList.isNotEmpty ? despachosList.last : null);
       if (despachoActivo is Map) {
-        if (despachoActivo['movilunidad'] is Map && despachoActivo['movilunidad']['idmovil'] != null) {
-          idMovilAsignado = despachoActivo['movilunidad']['idmovil'].toString();
-        } else if (despachoActivo['idmovilunidad'] != null) {
-          idMovilAsignado = despachoActivo['idmovilunidad'].toString();
+        if (idDespacho == null && despachoActivo['iddespacho'] != null) {
+          idDespacho = int.tryParse(despachoActivo['iddespacho'].toString());
+        }
+        if (idMovilAsignado == null || idMovilAsignado.isEmpty) {
+          if (despachoActivo['movilunidad'] is Map && despachoActivo['movilunidad']['idmovil'] != null) {
+            idMovilAsignado = despachoActivo['movilunidad']['idmovil'].toString();
+          } else if (despachoActivo['idmovilunidad'] != null) {
+            idMovilAsignado = despachoActivo['idmovilunidad'].toString();
+          }
         }
       }
     }
@@ -90,6 +98,7 @@ class Victima {
           : null,
       observaciones: json['observaciones'],
       idMovilAsignado: idMovilAsignado,
+      idDespacho: idDespacho,
       reporte: json['reporte'],
     );
   }
@@ -108,6 +117,7 @@ class Victima {
     if (fechahoraConfirmaDespacho != null) map['fechahora_confirma_despacho'] = fechahoraConfirmaDespacho!.toIso8601String();
     if (observaciones != null) map['observaciones'] = observaciones;
     if (idMovilAsignado != null) map['id_movil_asignado'] = idMovilAsignado;
+    if (idDespacho != null) map['iddespacho'] = idDespacho;
     if (reporte != null) map['reporte'] = reporte;
     return map;
   }
@@ -125,6 +135,7 @@ class Victima {
     DateTime? fechahoraConfirmaDespacho,
     String? observaciones,
     String? idMovilAsignado,
+    int? idDespacho,
     String? reporte,
     bool clearMovil = false,
   }) {
@@ -141,6 +152,7 @@ class Victima {
       fechahoraConfirmaDespacho: fechahoraConfirmaDespacho ?? this.fechahoraConfirmaDespacho,
       observaciones: observaciones ?? this.observaciones,
       idMovilAsignado: clearMovil ? null : (idMovilAsignado ?? this.idMovilAsignado),
+      idDespacho: clearMovil ? null : (idDespacho ?? this.idDespacho),
       reporte: reporte ?? this.reporte,
     );
   }
