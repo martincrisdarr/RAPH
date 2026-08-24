@@ -57,7 +57,11 @@ class DespachoController extends ChangeNotifier {
     notifyListeners();
 
     await _cargarDatosLocales();
-    await cargarIncidentesActivos();
+    await Future.wait([
+      cargarIncidentesActivos(),
+      cargarMoviles(),
+      cargarUnidades(),
+    ]);
 
     _isLoading = false;
     notifyListeners();
@@ -753,11 +757,17 @@ class DespachoController extends ChangeNotifier {
 
       if (idMovilInt != null) {
         try {
-          await DespachoService.registrarDespacho(
+          final res = await DespachoService.registrarDespacho(
             idVictima: idVictima,
             idMovilUnidad: idMovilInt,
             observacion: 'Despacho asignado desde RAPH Web para víctima #$idVictima',
           );
+          if (res != null && res['iddespacho'] != null) {
+            final idDespachoCreated = int.tryParse(res['iddespacho'].toString());
+            if (idDespachoCreated != null) {
+              incident.victimas![vIndex] = victimaActualizada.copyWith(idDespacho: idDespachoCreated);
+            }
+          }
         } catch (e) {
           print('[DespachoController] Error al registrar despacho en la tabla ser_sien_dsp_despacho: $e');
         }
@@ -768,7 +778,7 @@ class DespachoController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void removerMovilDeVictima(int idIncidente, int idVictima, String idMovil) {
+  void removerMovilDeVictima(int idIncidente, int idVictima, String idMovil, {int? idDespacho}) async {
     // 1. Encontrar el incidente y la víctima
     final incIndex = _incidentesActivos.indexWhere(
       (element) => element.incidente?.idIncidente == idIncidente || element.idDemandaRecibida == idIncidente
@@ -781,13 +791,24 @@ class DespachoController extends ChangeNotifier {
     final vIndex = incident.victimas!.indexWhere((v) => v.idVictima == idVictima);
     if (vIndex == -1) return;
 
+    final idDespachoAEliminar = idDespacho ?? incident.victimas![vIndex].idDespacho;
+
     // 2. Desasignar móvil de la víctima
     final victimaActualizada = incident.victimas![vIndex].copyWith(
       clearMovil: true,
     );
     incident.victimas![vIndex] = victimaActualizada;
 
-    // 3. Si el móvil ya no está asignado a ninguna otra víctima de los incidentes activos, liberarlo
+    // 3. Eliminar el despacho de la BD si tenemos su ID
+    if (idDespachoAEliminar != null) {
+      try {
+        await DespachoService.cancelarDespacho(idDespachoAEliminar);
+      } catch (e) {
+        print('[DespachoController] Error al cancelar despacho $idDespachoAEliminar: $e');
+      }
+    }
+
+    // 4. Si el móvil ya no está asignado a ninguna otra víctima de los incidentes activos, liberarlo
     bool sigueEnUso = false;
     for (var dem in _incidentesActivos) {
       if (dem.incidente?.victimas != null) {
@@ -804,12 +825,18 @@ class DespachoController extends ChangeNotifier {
     if (!sigueEnUso) {
       final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
       if (mIndex != -1) {
-        _moviles[mIndex] = _moviles[mIndex].copyWith(
+        final movilLibre = _moviles[mIndex].copyWith(
           estado: 'Disponible',
           clearIncidente: true,
           latitud: idMovil == 'm1' ? -38.9515 : (idMovil == 'm2' ? -38.9580 : -38.9480),
           longitud: idMovil == 'm1' ? -68.0610 : (idMovil == 'm2' ? -68.0520 : -68.0750),
         );
+        _moviles[mIndex] = movilLibre;
+        try {
+          await MovilService.actualizarMovil(movilLibre);
+        } catch (e) {
+          print('[DespachoController] Error al actualizar estado del móvil $idMovil: $e');
+        }
       }
     }
 

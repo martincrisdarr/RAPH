@@ -73,8 +73,11 @@ class MovilService {
   /// Actualiza un móvil existente en el backend
   static Future<Movil?> actualizarMovil(Movil movil) async {
     try {
+      final cleanId = movil.id.replaceAll(RegExp(r'[^0-9]'), '');
+      final targetId = cleanId.isNotEmpty ? cleanId : movil.id;
+
       final response = await http.put(
-        Uri.parse('$_endpoint/${movil.id}'),
+        Uri.parse('$_endpoint/$targetId'),
         headers: _getHeaders(),
         body: json.encode({
           'nombre': movil.nombre,
@@ -90,20 +93,23 @@ class MovilService {
           return Movil.fromJson(decoded);
         }
       } else {
-        print('[MovilService] Error al actualizar móvil: status ${response.statusCode}');
+        print('[MovilService] Error al actualizar móvil: status ${response.statusCode} - ${response.body}');
       }
       return null;
     } catch (e) {
       print('[MovilService] Excepción al actualizar móvil: $e');
-      rethrow;
+      return null;
     }
   }
 
   /// Elimina (desactiva) un móvil en el backend
   static Future<bool> eliminarMovil(String idMovil) async {
     try {
+      final cleanId = idMovil.replaceAll(RegExp(r'[^0-9]'), '');
+      final targetId = cleanId.isNotEmpty ? cleanId : idMovil;
+
       final response = await http.delete(
-        Uri.parse('$_endpoint/$idMovil'),
+        Uri.parse('$_endpoint/$targetId'),
         headers: _getHeaders(),
       );
 
@@ -115,7 +121,7 @@ class MovilService {
       }
     } catch (e) {
       print('[MovilService] Excepción al eliminar móvil: $e');
-      rethrow;
+      return false;
     }
   }
 }
