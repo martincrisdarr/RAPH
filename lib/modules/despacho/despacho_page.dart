@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -66,6 +67,7 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
   // Estado local de selección
   DemandaRecibida? _selectedIncident;
   Movil? _selectedMovil;
+  Timer? _incidentesTimer;
   
   // Controladores de mapa
   GoogleMapController? _mapController;
@@ -102,19 +104,37 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
     _controller.inicializar();
+    _controller.cargarIncidentesActivos();
+    _iniciarPollingIncidentes();
   }
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
-    if (_tabController.index == 1) {
+    if (_tabController.index == 0) {
+      _controller.cargarIncidentesActivos();
+    } else if (_tabController.index == 1) {
       _controller.cargarMoviles();
     } else if (_tabController.index == 2) {
       _controller.cargarUnidades();
     }
   }
 
+  void _iniciarPollingIncidentes() {
+    _incidentesTimer?.cancel();
+    _incidentesTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_tabController.index == 0 && _selectedIncident == null) {
+        _controller.cargarIncidentesActivos();
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _incidentesTimer?.cancel();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _mapController?.dispose();
@@ -355,8 +375,19 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                 ],
               ),
               IconButton(
-                icon: const Icon(Icons.refresh, size: 18, color: Colors.white60),
-                onPressed: () => _controller.cargarIncidentesActivos(),
+                icon: _controller.isIncidentesLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.accentBlue,
+                        ),
+                      )
+                    : const Icon(Icons.refresh, size: 18, color: Colors.white60),
+                onPressed: _controller.isIncidentesLoading
+                    ? null
+                    : () => _controller.cargarIncidentesActivos(),
                 tooltip: 'Actualizar incidentes',
               ),
             ],
@@ -374,20 +405,27 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                       final inc = demanda.incidente;
                       if (inc == null) return const SizedBox.shrink();
                       
-                      // Determinar color de prioridad (simulado a partir de descripción o id)
+                      // Determinar color de prioridad y etiqueta según idconf_codigo / codigoTriage
                       Color priorityColor = AppColors.accentGreen;
                       String priorityLabel = 'BAJA';
                       
+                      final code = inc.idConfCodigo;
+                      final triage = inc.codigoTriage?.toLowerCase();
                       final descLower = (inc.descripcion ?? '').toLowerCase();
-                      if (descLower.contains('dolor tor') || descLower.contains('trauma') || descLower.contains('atrapado')) {
+
+                      if (code == 29 || triage == 'rojo' || descLower.contains('dolor tor') || descLower.contains('trauma') || descLower.contains('atrapado')) {
                         priorityColor = AppColors.accentRed;
                         priorityLabel = 'ROJA';
-                      } else if (descLower.contains('colisión') || descLower.contains('vial')) {
+                      } else if (code == 30 || triage == 'amarillo' || descLower.contains('colisión') || descLower.contains('vial')) {
                         priorityColor = Colors.orangeAccent;
                         priorityLabel = 'AMARILLA';
+                      } else if (code == 31 || triage == 'verde') {
+                        priorityColor = AppColors.accentGreen;
+                        priorityLabel = 'VERDE';
                       }
 
                       final isSelected = _selectedIncident?.idDemandaRecibida == demanda.idDemandaRecibida;
+                      final isRojo = priorityLabel == 'ROJA';
                       
                       // Verificar si tiene móvil despachado
                       final despachados = _controller.moviles.where((m) => m.idIncidenteActivo == (demanda.incidente?.idIncidente ?? demanda.idDemandaRecibida));
@@ -397,14 +435,14 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                         margin: const EdgeInsets.only(bottom: 10),
                         decoration: BoxDecoration(
                           color: isSelected 
-                              ? theme.colorScheme.primary.withOpacity(0.08) 
-                              : Colors.white.withOpacity(0.02),
+                              ? theme.colorScheme.primary.withOpacity(0.12) 
+                              : AppColors.surfaceAlt,
                           borderRadius: BorderRadius.circular(AppRadii.md),
                           border: Border.all(
                             color: isSelected 
-                                ? theme.colorScheme.primary.withOpacity(0.6) 
-                                : AppColors.border.withOpacity(0.6),
-                            width: isSelected ? 1.5 : 1,
+                                ? theme.colorScheme.primary 
+                                : (isRojo ? AppColors.accentRed : AppColors.border.withOpacity(0.6)),
+                            width: isSelected ? 1.5 : (isRojo ? 1.5 : 1),
                           ),
                         ),
                         child: InkWell(
@@ -693,7 +731,10 @@ Widget _buildMapContainer(ThemeData theme) {
                 const Text('CONTROL DE DESPACHO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accentBlue)),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18, color: Colors.white60),
-                  onPressed: () => setState(() => _selectedIncident = null),
+                  onPressed: () {
+                    setState(() => _selectedIncident = null);
+                    _controller.cargarIncidentesActivos();
+                  },
                 ),
               ],
             ),

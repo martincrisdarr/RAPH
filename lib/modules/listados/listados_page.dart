@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../shared/models/demanda_recibida.dart';
+import '../../shared/theme/app_theme_tokens.dart';
 import '../ingreso/controllers/ingreso_controller.dart';
 import 'widgets/kanban_column.dart';
 import 'widgets/kanban_card.dart';
@@ -78,36 +78,120 @@ class _ListadosPageState extends State<ListadosPage> {
 
           if (idIncidente.isEmpty) continue;
 
+          final int? idConfCode = int.tryParse((incident['idconf_codigo'] ?? map['idconf_codigo'] ?? '').toString());
           String? priority = map['prioridad'] ?? incident['codigo_triage'] ?? incident['codigoTriage'];
+
+          if (idConfCode == 29) {
+            priority = 'ROJA';
+          } else if (idConfCode == 30) {
+            priority = 'AMARILLA';
+          } else if (idConfCode == 31) {
+            priority = 'VERDE';
+          }
+
           Color priorityColor;
           switch (priority?.toUpperCase()) {
             case 'ROJO':
-              priorityColor = Colors.redAccent;
+            case 'ROJA':
+              priority = 'ROJA';
+              priorityColor = AppColors.accentRed;
               break;
             case 'AMARILLO':
+            case 'AMARILLA':
+              priority = 'AMARILLA';
               priorityColor = Colors.orangeAccent;
               break;
             case 'VERDE':
-              priorityColor = Colors.greenAccent;
+              priority = 'VERDE';
+              priorityColor = AppColors.accentGreen;
               break;
             default:
-              priorityColor = Colors.grey;
+              final descLower = (incident['descripcion'] ?? '').toString().toLowerCase();
+              if (descLower.contains('dolor tor') || descLower.contains('trauma') || descLower.contains('atrapado')) {
+                priority = 'ROJA';
+                priorityColor = AppColors.accentRed;
+              } else if (descLower.contains('colisión') || descLower.contains('vial')) {
+                priority = 'AMARILLA';
+                priorityColor = Colors.orangeAccent;
+              } else {
+                priority = 'VERDE';
+                priorityColor = AppColors.accentGreen;
+              }
           }
 
           List<MovilStatus> moviles = [];
-          if (map['moviles'] is List) {
+
+          // 1. Extraer víctimas y sus despachos
+          if (incident['victimas'] is List && (incident['victimas'] as List).isNotEmpty) {
+            final victimasList = incident['victimas'] as List;
+            for (int vIdx = 0; vIdx < victimasList.length; vIdx++) {
+              final v = victimasList[vIdx];
+              if (v is! Map) continue;
+
+              String vNombre = 'Víctima ${vIdx + 1}';
+              if (v['persona'] is Map && v['persona']['apellido'] != null) {
+                final p = v['persona'];
+                final fullName = '${p['apellido'] ?? ''} ${p['nombre'] ?? ''}'.trim();
+                if (fullName.isNotEmpty) vNombre = fullName;
+              } else if (v['persona_sin_dni'] is Map && v['persona_sin_dni']['nombre'] != null) {
+                final sinDni = v['persona_sin_dni']['nombre'].toString().trim();
+                if (sinDni.isNotEmpty) vNombre = sinDni;
+              }
+
+              bool tieneDespacho = false;
+              if (v['despachos'] is List) {
+                for (final d in (v['despachos'] as List)) {
+                  if (d is Map && (d['activo'] == null || d['activo'].toString() != '0')) {
+                    tieneDespacho = true;
+                    String mNombre = 'Móvil';
+                    if (d['movilunidad'] is Map) {
+                      final mu = d['movilunidad'];
+                      if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+                        mNombre = mu['movil']['nombre'].toString();
+                      } else if (mu['nombre'] != null) {
+                        mNombre = mu['nombre'].toString();
+                      } else if (mu['patente'] != null) {
+                        mNombre = 'Unidad ${mu['patente']}';
+                      }
+                    }
+                    moviles.add(MovilStatus(
+                      nombre: mNombre,
+                      status: 'Despachado',
+                      victimaNombre: vNombre,
+                      tieneMovil: true,
+                      lastStatusChange: d['fechahoradespacho'] != null
+                          ? DateTime.tryParse(d['fechahoradespacho'].toString()) ?? DateTime.now()
+                          : DateTime.now(),
+                    ));
+                  }
+                }
+              }
+
+              if (!tieneDespacho) {
+                moviles.add(MovilStatus(
+                  nombre: 'Sin móvil',
+                  status: 'Sin asignar',
+                  victimaNombre: vNombre,
+                  tieneMovil: false,
+                ));
+              }
+            }
+          }
+
+          if (moviles.isEmpty && map['moviles'] is List) {
             moviles = (map['moviles'] as List).map<MovilStatus>((m) {
               return MovilStatus(
                 nombre: m['nombre'] ?? 'Desconocido',
                 status: m['status'] ?? 'Desconocido',
+                victimaNombre: 'Víctima',
+                tieneMovil: true,
                 lastStatusChange: m['lastStatusChange'] != null
-                    ? DateTime.parse(m['lastStatusChange'])
+                    ? DateTime.tryParse(m['lastStatusChange'].toString()) ?? DateTime.now()
                     : DateTime.now(),
               );
             }).toList();
           }
 
-          final estado = map['estado'] ?? (map['ultimoEstadoRel'] != null ? map['ultimoEstadoRel']['estadoRel'] : null);
 
           final String direccionStr = (incident['direccion'] != null && incident['direccion'].toString().trim().isNotEmpty)
               ? incident['direccion'].toString().trim()
@@ -121,10 +205,24 @@ class _ListadosPageState extends State<ListadosPage> {
 
           String title = direccionStr;
           String subtitle = descripcionStr;
-          String time = (incident['fechahoraauto'] ?? map['fechahora'])?.toString() ?? '';
-          String rawStatus = estado != null && estado['descripcion'] != null ? estado['descripcion'].toString() : 'Desconocido';
-          const allowedStatuses = ['Llamada recibida', 'En curso', 'Finalizado'];
-          String status = allowedStatuses.contains(rawStatus) ? rawStatus : 'Llamada recibida';
+          String time = _formatFechaCreacion(incident['fechahoraauto'] ?? map['fechahora']);
+
+          // 2. Estado Kanban dinámico
+          final int? idEstadoInc = int.tryParse((
+            map['idcfg_estado'] ?? 
+            (map['ultimoEstadoRel'] != null ? map['ultimoEstadoRel']['idestado'] : null) ?? 
+            ''
+          ).toString());
+          final bool isIncActivo = (incident['activo'] ?? map['activo'] ?? 1).toString() != '0';
+
+          String status = 'Llamada recibida';
+          if (!isIncActivo || idEstadoInc == 7 || idEstadoInc == 8) {
+            status = 'Finalizado';
+          } else if (moviles.any((m) => m.tieneMovil)) {
+            status = 'En curso';
+          } else {
+            status = 'Llamada recibida';
+          }
 
           itemsMap[idIncidente] = KanbanItem(
             id: idIncidente,
@@ -147,6 +245,17 @@ class _ListadosPageState extends State<ListadosPage> {
       setState(() => _isLoading = false);
       print('Error al precargar datos de API: $e');
     }
+  }
+
+  String _formatFechaCreacion(dynamic fechaRaw) {
+    if (fechaRaw == null || fechaRaw.toString().trim().isEmpty) return '';
+    final dt = DateTime.tryParse(fechaRaw.toString());
+    if (dt == null) return fechaRaw.toString();
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    final dd = dt.day.toString().padLeft(2, '0');
+    final mes = dt.month.toString().padLeft(2, '0');
+    return '$hh:$mm $dd/$mes';
   }
 
   List<KanbanItem> _items = [];
@@ -398,7 +507,7 @@ class _ListadosPageState extends State<ListadosPage> {
       child: KanbanColumn(
         title: title,
         count: _isLoading ? 0 : columnItems.length,
-        isGrid: isEnCurso,
+        isGrid: false,
         accentColor: accentColor,
         onAccept: (itemTitle) => _onItemDropped(itemTitle, dropStatus),
         children: childrenWidgets,
