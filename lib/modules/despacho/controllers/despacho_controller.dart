@@ -216,7 +216,30 @@ class DespachoController extends ChangeNotifier {
     _guardarMoviles();
   }
 
+  bool _isIncidentesLoading = false;
+  bool get isIncidentesLoading => _isIncidentesLoading;
+
+  int _getPrioridadPeso(DemandaRecibida d) {
+    final inc = d.incidente;
+    if (inc == null) return 4;
+    final code = inc.idConfCodigo;
+    final triage = inc.codigoTriage?.toLowerCase();
+
+    if (code == 29 || triage == 'rojo') return 1;
+    if (code == 30 || triage == 'amarillo') return 2;
+    if (code == 31 || triage == 'verde') return 3;
+
+    final desc = (inc.descripcion ?? '').toLowerCase();
+    if (desc.contains('dolor tor') || desc.contains('trauma') || desc.contains('atrapado')) return 1;
+    if (desc.contains('colisión') || desc.contains('vial')) return 2;
+
+    return 3;
+  }
+
   Future<void> cargarIncidentesActivos() async {
+    if (_isIncidentesLoading) return;
+    _isIncidentesLoading = true;
+    notifyListeners();
     try {
       final raw = await ListadosService.obtenerIncidentesParaDespacho();
       final list = <DemandaRecibida>[];
@@ -275,6 +298,16 @@ class DespachoController extends ChangeNotifier {
         }
       }
 
+      // Ordenar por prioridad (Rojo -> Amarillo -> Verde) y fecha reciente
+      list.sort((a, b) {
+        final pA = _getPrioridadPeso(a);
+        final pB = _getPrioridadPeso(b);
+        if (pA != pB) return pA.compareTo(pB);
+        final dateA = a.incidente?.fechaHoraAuto ?? a.fechaHora ?? DateTime(1970);
+        final dateB = b.incidente?.fechaHoraAuto ?? b.fechaHora ?? DateTime(1970);
+        return dateB.compareTo(dateA);
+      });
+
       _incidentesActivos = list;
 
       // Sincronizar estado de móviles según las víctimas y sus despachos activos en la BD
@@ -324,6 +357,8 @@ class DespachoController extends ChangeNotifier {
             usuario: 'Ingreso RAPH',
             incidente: Incidente(
               idIncidente: 901,
+              idConfCodigo: 29,
+              codigoTriage: 'Rojo',
               direccion: 'Av. Argentina 250, Neuquén',
               descripcion: 'Paciente de 45 años con dolor torácico agudo y disnea.',
               latitud: -38.9516,
@@ -358,6 +393,8 @@ class DespachoController extends ChangeNotifier {
             usuario: 'Llamada 107',
             incidente: Incidente(
               idIncidente: 902,
+              idConfCodigo: 30,
+              codigoTriage: 'Amarillo',
               direccion: 'Ruta 22 y Cnel. Olascoaga, Neuquén',
               descripcion: 'Colisión de dos autos. Un conductor atrapado con traumatismos múltiples.',
               latitud: -38.9592,
@@ -476,6 +513,9 @@ class DespachoController extends ChangeNotifier {
           ),
         ),
       ];
+      notifyListeners();
+    } finally {
+      _isIncidentesLoading = false;
       notifyListeners();
     }
   }
