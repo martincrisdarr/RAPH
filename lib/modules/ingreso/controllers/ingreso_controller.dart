@@ -148,6 +148,14 @@ class IngresoController extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<String> _etiquetasSeleccionadas = [];
+  List<String> get etiquetasSeleccionadas => _etiquetasSeleccionadas;
+  set etiquetasSeleccionadas(List<String> value) {
+    _etiquetasSeleccionadas = value;
+    _guardarBorrador();
+    notifyListeners();
+  }
+
   bool get tieneBorrador {
     final tieneIdIncidente = _incidenteActual.idIncidente != null;
     final tieneIdDemanda = _demandaActual.idDemandaRecibida != null;
@@ -390,32 +398,25 @@ class IngresoController extends ChangeNotifier {
   }
   
   Future<void> _sincronizarConBackend() async {
-    // Si no tenemos ID de demanda recibida, sólo se hace POST si el usuario ha escrito datos reales del llamante
+    // Si no tenemos ID de incidente aún, NO se realiza POST de la demanda aislada.
+    if (_demandaActual.idIncidente == null && _incidenteActual.idIncidente == null) {
+      return;
+    }
+
     if (_demandaActual.idDemandaRecibida == null) {
-      final tieneDatosLlamante = _demandaActual.nroLlamadaEntrante != null ||
+      // Verificar que se hayan completado datos reales del llamante (teléfono, nombre o DNI)
+      final tieneDatosLlamada = _demandaActual.nroLlamadaEntrante != null ||
           (_demandaActual.apellidoNombre != null && _demandaActual.apellidoNombre!.trim().isNotEmpty) ||
           (_demandaActual.dni != null && _demandaActual.dni!.trim().isNotEmpty);
 
-      if (!tieneDatosLlamante) {
-        return; // Evitar POSTs de demandas vacías al ingresar a un incidente
+      if (!tieneDatosLlamada) {
+        return; // Evitar POSTs de demandas recibidas vacías/anónimas al ingresar o editar incidentes
       }
 
-      // Asegurar que si tenemos datos de incidente pero no idIncidente aún, se cree/vincule el incidente primero
-      if (_demandaActual.idIncidente == null && 
-          ((_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) || 
-           (_incidenteActual.direccionAuto != null && _incidenteActual.direccionAuto!.trim().isNotEmpty) || 
-           _incidenteActual.latitud != null ||
-           (_incidenteActual.codigoTriage != null && _incidenteActual.codigoTriage!.trim().isNotEmpty))) {
-        if (_incidenteActual.idIncidente == null) {
-          final creadoInc = await IncidenteService.crear(_incidenteActual);
-          if (creadoInc != null && creadoInc.idIncidente != null) {
-            _incidenteActual = _incidenteActual.copyWith(idIncidente: creadoInc.idIncidente);
-            _demandaActual = _demandaActual.copyWith(idIncidente: creadoInc.idIncidente);
-          }
-        } else {
-          _demandaActual = _demandaActual.copyWith(idIncidente: _incidenteActual.idIncidente);
-        }
-      }
+      final targetIncId = _demandaActual.idIncidente ?? _incidenteActual.idIncidente;
+      if (targetIncId == null) return;
+
+      _demandaActual = _demandaActual.copyWith(idIncidente: targetIncId);
 
       final creada = await DemandaRecibidaService.crear(_demandaActual);
       if (creada != null && creada.idDemandaRecibida != null) {
@@ -432,27 +433,38 @@ class IngresoController extends ChangeNotifier {
   /// Se llama cuando se modifica cualquier propiedad del incidente (ubicación, código, descripción).
   /// Hace POST si es un incidente nuevo o PUT si ya existe.
   Future<void> syncIncidenteDesdeGoogleMaps() async {
-    final tieneContenido = _incidenteActual.latitud != null ||
-        _incidenteActual.longitud != null ||
-        (_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) ||
+    final tieneUbicacionValida = (_incidenteActual.direccion != null && _incidenteActual.direccion!.trim().isNotEmpty) ||
         (_incidenteActual.direccionAuto != null && _incidenteActual.direccionAuto!.trim().isNotEmpty) ||
-        (_incidenteActual.descripcion != null && _incidenteActual.descripcion!.trim().isNotEmpty) ||
-        (_incidenteActual.codigoTriage != null && _incidenteActual.codigoTriage!.trim().isNotEmpty) ||
-        _incidenteActual.idConfCodigo != null;
+        _incidenteActual.latitud != null;
 
-    if (!tieneContenido) return;
+    if (!tieneUbicacionValida && _incidenteActual.idIncidente == null) {
+      return; // No crear incidente sin ubicación
+    }
 
     if (_incidenteActual.idIncidente == null) {
       final creado = await IncidenteService.crear(_incidenteActual);
       if (creado != null && creado.idIncidente != null) {
         _incidenteActual = _incidenteActual.copyWith(idIncidente: creado.idIncidente);
         _sincronizarSocketRoom();
+        
         // Vinculamos el incidente con la demanda
         _demandaActual = _demandaActual.copyWith(idIncidente: creado.idIncidente);
         await _guardarBorrador();
         notifyListeners();
-        // Disparamos la sincronización de la demanda para que guarde el idincidente
-        _programarGuardadoRemoto();
+
+        // Disparamos la creación de la demanda vinculada SÓLO si se ingresaron datos del llamante
+        final tieneDatosLlamada = _demandaActual.nroLlamadaEntrante != null ||
+            (_demandaActual.apellidoNombre != null && _demandaActual.apellidoNombre!.trim().isNotEmpty) ||
+            (_demandaActual.dni != null && _demandaActual.dni!.trim().isNotEmpty);
+
+        if (tieneDatosLlamada) {
+          final creadaDem = await DemandaRecibidaService.crear(_demandaActual);
+          if (creadaDem != null && creadaDem.idDemandaRecibida != null) {
+            _demandaActual = _demandaActual.copyWith(idDemandaRecibida: creadaDem.idDemandaRecibida);
+            await _guardarBorrador();
+            notifyListeners();
+          }
+        }
       }
     } else {
       await IncidenteService.actualizar(_incidenteActual);

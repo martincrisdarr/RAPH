@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../shared/services/movil_service.dart';
 
-class FilterSidebar extends StatelessWidget {
+class FilterSidebar extends StatefulWidget {
   final String? selectedMovil;
   final ValueChanged<String?> onMovilChanged;
   final String? selectedCodigo;
@@ -25,6 +26,33 @@ class FilterSidebar extends StatelessWidget {
   });
 
   @override
+  State<FilterSidebar> createState() => _FilterSidebarState();
+}
+
+class _FilterSidebarState extends State<FilterSidebar> {
+  List<String> _movilesList = ['Móvil 1', 'Móvil 2', 'Móvil 3', 'Móvil 4'];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarMovilesReales();
+  }
+
+  Future<void> _cargarMovilesReales() async {
+    try {
+      final moviles = await MovilService.obtenerMoviles();
+      if (moviles.isNotEmpty) {
+        final nombres = moviles.map((m) => m.nombre).where((n) => n.isNotEmpty).toList();
+        if (nombres.isNotEmpty && mounted) {
+          setState(() {
+            _movilesList = nombres;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
@@ -39,7 +67,7 @@ class FilterSidebar extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 20,
             offset: const Offset(-5, 0),
           ),
@@ -65,9 +93,9 @@ class FilterSidebar extends StatelessWidget {
                   ),
                 ],
               ),
-              if (onClose != null)
+              if (widget.onClose != null)
                 IconButton(
-                  onPressed: onClose,
+                  onPressed: widget.onClose,
                   icon: const Icon(Icons.close, size: 20, color: Colors.white38),
                 ),
             ],
@@ -78,10 +106,10 @@ class FilterSidebar extends StatelessWidget {
           _buildDropdownFilter(
             theme: theme,
             label: 'Móvil',
-            value: selectedMovil,
+            value: widget.selectedMovil,
             hint: 'Seleccionar móvil',
-            items: ['Movil 1', 'Movil 2', 'Movil 3', 'Movil 4'],
-            onChanged: onMovilChanged,
+            items: _movilesList,
+            onChanged: widget.onMovilChanged,
           ),
           
           const SizedBox(height: 16),
@@ -90,10 +118,10 @@ class FilterSidebar extends StatelessWidget {
           _buildDropdownFilter(
             theme: theme,
             label: 'Código',
-            value: selectedCodigo,
+            value: widget.selectedCodigo,
             hint: 'Seleccionar código',
-            items: ['VERDE', 'AMARILLO', 'ROJO'],
-            onChanged: onCodigoChanged,
+            items: const ['VERDE', 'AMARILLO', 'ROJO'],
+            onChanged: widget.onCodigoChanged,
           ),
           
           const SizedBox(height: 16),
@@ -106,15 +134,15 @@ class FilterSidebar extends StatelessWidget {
           const SizedBox(height: 12),
           _DateTile(
             label: 'Desde',
-            date: fechaDesde,
-            onTap: onSelectFechaDesde,
+            date: widget.fechaDesde,
+            onTap: widget.onSelectFechaDesde,
             theme: theme,
           ),
           const SizedBox(height: 8),
           _DateTile(
             label: 'Hasta',
-            date: fechaHasta,
-            onTap: onSelectFechaHasta,
+            date: widget.fechaHasta,
+            onTap: widget.onSelectFechaHasta,
             theme: theme,
           ),
           
@@ -124,12 +152,15 @@ class FilterSidebar extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () {},
+              onPressed: () {
+                widget.onMovilChanged(null);
+                widget.onCodigoChanged(null);
+              },
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.white10),
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4), // Menos border radius
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
               child: const Text(
@@ -166,7 +197,7 @@ class FilterSidebar extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: theme.colorScheme.background,
+            color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white10),
           ),
@@ -212,13 +243,13 @@ class _DateTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.background,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.white10),
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today, size: 16, color: theme.colorScheme.primary.withOpacity(0.5)),
+            Icon(Icons.calendar_today, size: 16, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

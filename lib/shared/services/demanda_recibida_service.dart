@@ -73,62 +73,44 @@ class DemandaRecibidaService {
 
   static Future<List<DemandaRecibida>> obtenerRecientes({DateTime? fecha, String? direccion}) async {
     try {
-      // 1. Petición al endpoint principal de demandas recibidas
-      var urlStr = '$_baseUrl?expand=estado,tipo_ingreso,incidente';
+      var incUrlStr = '${ApiConfig.baseUrl}/ser_sien_dsp_incidente/recientes?expand=ultimoEstadoRel.estadoRel';
 
       if (direccion != null && direccion.isNotEmpty) {
-        urlStr += '&filter%5Bdireccion%5D%5Blike%5D=${Uri.encodeComponent(direccion)}';
+        incUrlStr += '&filter%5Bdireccion%5D%5Blike%5D=${Uri.encodeComponent(direccion)}';
       }
 
       if (fecha != null) {
         final f = fecha;
         final fechaStr = '${f.year}-${f.month.toString().padLeft(2, '0')}-${f.day.toString().padLeft(2, '0')}';
-        urlStr += '&filter%5Bfechahora%5D%5Blike%5D=${Uri.encodeComponent(fechaStr)}';
+        incUrlStr += '&filter%5Bfechahoraauto%5D%5Blike%5D=${Uri.encodeComponent(fechaStr)}';
       }
 
-      final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
+      final responseInc = await http.get(Uri.parse(incUrlStr), headers: _getHeaders());
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        if (data.isNotEmpty) {
-          return data.map<DemandaRecibida>((j) => DemandaRecibida.fromJson(j)).toList();
-        }
-      }
-
-      // 2. Fallback al endpoint de incidentes recientes si el principal no devolvió resultados
-      final baseIncidenteUrl = '${ApiConfig.baseUrl}/ser_sien_dsp_incidente/recientes?expand=ultimoEstadoRel.estadoRel';
-      final responseInc = await http.get(Uri.parse(baseIncidenteUrl), headers: _getHeaders());
       if (responseInc.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(responseInc.body);
-        return data.map<DemandaRecibida>((j) {
-          if (j is Map<String, dynamic>) {
-            if (j.containsKey('iddemandarecibida')) {
-              return DemandaRecibida.fromJson(j);
-            }
-            final idIncidente = j['idincidente'] != null ? int.tryParse(j['idincidente'].toString()) : null;
-            final estadoMap = j['ultimoEstadoRel'] != null && j['ultimoEstadoRel']['estadoRel'] != null
-                ? j['ultimoEstadoRel']['estadoRel']
-                : j['estado'];
+        final decoded = jsonDecode(responseInc.body);
+        if (decoded is List) {
+          return decoded.map<DemandaRecibida>((j) {
+            if (j is Map<String, dynamic>) {
+              final idIncidente = j['idincidente'] != null ? int.tryParse(j['idincidente'].toString()) : null;
+              final estadoMap = j['ultimoEstadoRel'] != null && j['ultimoEstadoRel']['estadoRel'] != null
+                  ? j['ultimoEstadoRel']['estadoRel']
+                  : j['estado'];
 
-            return DemandaRecibida(
-              idDemandaRecibida: idIncidente ?? (j['iddemandarecibida'] != null ? int.tryParse(j['iddemandarecibida'].toString()) : null),
-              idIncidente: idIncidente,
-              fechaHora: (j['fechahoraauto'] ?? j['fechahora']) != null ? DateTime.tryParse((j['fechahoraauto'] ?? j['fechahora']).toString()) : null,
-              estado: estadoMap != null ? Configuracion.fromJson(estadoMap) : null,
-              tipoIngreso: j['tipo_ingreso'] != null ? Configuracion.fromJson(j['tipo_ingreso']) : null,
-              incidente: j['incidente'] != null
-                  ? Incidente.fromJson(j['incidente'])
-                  : Incidente(
-                      idIncidente: idIncidente,
-                      direccion: j['direccion'] ?? j['direccion_auto'] ?? 'No especificada',
-                      latitud: j['latitud'] != null ? double.tryParse(j['latitud'].toString()) : null,
-                      longitud: j['longitud'] != null ? double.tryParse(j['longitud'].toString()) : null,
-                      direccionAuto: j['direccion_auto'],
-                    ),
-            );
-          }
-          return DemandaRecibida();
-        }).toList();
+              return DemandaRecibida(
+                idDemandaRecibida: idIncidente ?? (j['iddemandarecibida'] != null ? int.tryParse(j['iddemandarecibida'].toString()) : null),
+                idIncidente: idIncidente,
+                fechaHora: (j['fechahoraauto'] ?? j['fechahora']) != null ? DateTime.tryParse((j['fechahoraauto'] ?? j['fechahora']).toString()) : null,
+                estado: estadoMap != null ? Configuracion.fromJson(estadoMap) : null,
+                tipoIngreso: j['tipo_ingreso'] != null ? Configuracion.fromJson(j['tipo_ingreso']) : null,
+                incidente: j['incidente'] != null
+                    ? Incidente.fromJson(j['incidente'])
+                    : Incidente.fromJson(j),
+              );
+            }
+            return DemandaRecibida();
+          }).toList();
+        }
       }
 
       return [];
