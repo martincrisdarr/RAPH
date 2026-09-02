@@ -751,7 +751,7 @@ Widget _buildMapContainer(ThemeData theme) {
             const Text('VÍCTIMAS DEL INCIDENTE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white70)),
             const SizedBox(height: 12),
             
-            if (victimas.isEmpty)
+            if (victimas.isEmpty) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 width: double.infinity,
@@ -760,17 +760,76 @@ Widget _buildMapContainer(ThemeData theme) {
                   borderRadius: BorderRadius.circular(AppRadii.md),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: const Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: Colors.white38),
-                    SizedBox(width: 8),
-                    Text(
-                      'No hay víctimas registradas.',
-                      style: TextStyle(color: Colors.white38, fontSize: 13, fontStyle: FontStyle.italic),
+                    const Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 16, color: Colors.white38),
+                        SizedBox(width: 8),
+                        Text(
+                          'No hay víctimas registradas aún.',
+                          style: TextStyle(color: Colors.white38, fontSize: 13, fontStyle: FontStyle.italic),
+                        ),
+                      ],
                     ),
+                    if (inc.idConfCodigo == 29 || inc.codigoTriage == 'Rojo') ...[
+                      const SizedBox(height: 12),
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'DESPACHO RÁPIDO (CÓDIGO ROJO - SIN VÍCTIMA):',
+                        style: TextStyle(color: AppColors.accentRed, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Builder(builder: (context) {
+                        final despachables = _controller.moviles.where((m) => m.idmovilEstado == 1 || m.estado.trim().toLowerCase() == 'disponible').toList();
+                        if (despachables.isEmpty) {
+                          return const Text('No hay móviles disponibles', style: TextStyle(color: Colors.white38, fontSize: 11, fontStyle: FontStyle.italic));
+                        }
+                        return Column(
+                          children: despachables.map((m) {
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentRed.withOpacity(0.06),
+                                borderRadius: BorderRadius.circular(AppRadii.xs),
+                                border: Border.all(color: AppColors.accentRed.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.airport_shuttle, size: 16, color: AppColors.accentRed),
+                                      const SizedBox(width: 8),
+                                      Text(m.nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    ],
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.accentRed,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      minimumSize: const Size(60, 26),
+                                    ),
+                                    onPressed: () {
+                                      _controller.despacharMovilAIncidenteSinVictima(idIncidenteActual, m.id);
+                                    },
+                                    child: const Text('DESPACHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      }),
+                    ],
                   ],
                 ),
-              )
+              ),
+            ]
             else
               ...victimas.map((v) {
                 final assignedId = v.idMovilAsignado != null && v.idMovilAsignado!.isNotEmpty
@@ -1091,6 +1150,32 @@ Widget _buildMapContainer(ThemeData theme) {
   // ==========================================
   
   Widget _buildMovilesTab(ThemeData theme) {
+    final movilesList = List<Movil>.from(_controller.moviles);
+    movilesList.sort((a, b) {
+      int getPrioridad(Movil m) {
+        final estadoLower = m.estado.trim().toLowerCase();
+        if (m.idmovilEstado == 1 || estadoLower == 'disponible') {
+          return 1;
+        }
+        if (m.idIncidenteActivo != null ||
+            m.idmovilEstado == 2 ||
+            estadoLower == 'despachado' ||
+            estadoLower == 'en sitio' ||
+            estadoLower == 'traslado' ||
+            estadoLower == 'arribado') {
+          return 2;
+        }
+        return 3;
+      }
+
+      final pA = getPrioridad(a);
+      final pB = getPrioridad(b);
+      if (pA != pB) {
+        return pA.compareTo(pB);
+      }
+      return a.nombre.compareTo(b.nombre);
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1122,7 +1207,7 @@ Widget _buildMapContainer(ThemeData theme) {
         Expanded(
           child: _controller.isMovilesLoading
               ? _buildMovilesSkeletonGrid()
-              : (_controller.moviles.isEmpty
+              : (movilesList.isEmpty
                   ? const Center(child: Text('No hay móviles registrados.'))
                   : GridView.builder(
                       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -1131,9 +1216,9 @@ Widget _buildMapContainer(ThemeData theme) {
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
                       ),
-                      itemCount: _controller.moviles.length,
+                      itemCount: movilesList.length,
                       itemBuilder: (context, index) {
-                        final m = _controller.moviles[index];
+                        final m = movilesList[index];
                         
                         // Vehículo asignado
                         final u = _controller.unidades.cast<Unidad?>().firstWhere(

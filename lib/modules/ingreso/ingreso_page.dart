@@ -126,9 +126,7 @@ class _IngresoPageState extends State<IngresoPage> {
                               flex: 2,
                               child: IngresoSectionCard(
                                 title: 'INCIDENTE',
-                                child: IncidenteSection(
-                                  onDespacho: _iniciarDespachoRapido,
-                                ),
+                                child: IncidenteSection(),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -155,13 +153,11 @@ class _IngresoPageState extends State<IngresoPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
+                            const Expanded(
                               flex: 2,
                               child: IngresoSectionCard(
                                 title: 'VÍCTIMAS',
-                                child: DatosVictimasSection(
-                                  onDespacho: _iniciarDespachoRapido,
-                                ),
+                                child: DatosVictimasSection(),
                               ),
                             ),
                             const SizedBox(width: 16),

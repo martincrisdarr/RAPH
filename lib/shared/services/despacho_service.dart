@@ -19,7 +19,8 @@ class DespachoService {
 
   /// Registrar un nuevo despacho en ser_sien_dsp_despacho
   static Future<Map<String, dynamic>?> registrarDespacho({
-    required int idVictima,
+    int? idVictima,
+    int? idIncidente,
     required int idMovilUnidad,
     String? observacion,
   }) async {
@@ -28,7 +29,8 @@ class DespachoService {
       final fechaFormatted = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
 
       final bodyData = <String, dynamic>{
-        'idvictima': idVictima,
+        if (idVictima != null) 'idvictima': idVictima,
+        if (idIncidente != null) 'idincidente': idIncidente,
         'idmovilunidad': idMovilUnidad,
         'fechahoradespacho': fechaFormatted,
         'observacion': observacion ?? 'Despacho emitido desde RAPH Web',
@@ -56,6 +58,43 @@ class DespachoService {
     } catch (e) {
       print('[DespachoService] Excepción al crear despacho: $e');
       return null;
+    }
+  }
+
+  /// Asignar idvictima a un despacho existente (PUT /ser_sien_despacho/$idDespacho)
+  static Future<bool> asignarVictimaADespacho(int idDespacho, int idVictima) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$_endpoint/$idDespacho'),
+        headers: _getHeaders(),
+        body: json.encode({
+          'idvictima': idVictima,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('[DespachoService] Error al asignar víctima a despacho: $e');
+      return false;
+    }
+  }
+
+  /// Obtener despachos por idincidente
+  static Future<List<Map<String, dynamic>>> obtenerPorIncidente(int idIncidente) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_endpoint?filter%5Bidincidente%5D=$idIncidente'),
+        headers: _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        if (decoded is List) {
+          return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      print('[DespachoService] Error al obtener despachos por incidente: $e');
+      return [];
     }
   }
 

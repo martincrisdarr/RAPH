@@ -3,6 +3,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../controllers/ingreso_controller.dart';
 import '../../../shared/components/collab_text_field.dart';
 import '../../../shared/services/socket_service.dart';
+import '../../../shared/services/configuracion_service.dart';
 
 class IncidenteSection extends StatefulWidget {
   final VoidCallback? onDespacho;
@@ -20,8 +21,8 @@ class _IncidenteSectionState extends State<IncidenteSection> {
   bool _speechAvailable = false;
   bool _isListening = false;
   String _textBeforeListening = '';
-  
-  final List<Map<String, dynamic>> _protocolosSugeridos = [
+
+  final List<Map<String, dynamic>> _protocolosPredeterminados = [
     {'nombre': 'Accidente Vehicular', 'color': Colors.red.shade400},
     {'nombre': 'Derrumbe', 'color': Colors.red.shade400},
     {'nombre': 'Catástrofe', 'color': Colors.red.shade400},
@@ -30,12 +31,38 @@ class _IncidenteSectionState extends State<IncidenteSection> {
     {'nombre': 'Accidente Industrial', 'color': Colors.red.shade400},
   ];
 
+  List<Map<String, dynamic>> _protocolosDinamicos = [];
 
   @override
   void initState() {
     super.initState();
     _descripcionIncidenteController = TextEditingController(text: _ingresoController.incidenteActual.descripcion ?? '');
     _ingresoController.addListener(_onControllerUpdate);
+    _cargarProtocolos();
+  }
+
+  Future<void> _cargarProtocolos() async {
+    try {
+      final configTipos = await ConfiguracionService.obtenerTiposIncidente();
+      final lista = <Map<String, dynamic>>[];
+      for (var p in configTipos) {
+        if (p.descripcion.isNotEmpty) {
+          lista.add({'nombre': p.descripcion, 'color': Colors.red.shade400});
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _protocolosDinamicos = lista.isNotEmpty ? lista : _protocolosPredeterminados;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _protocolosDinamicos = _protocolosPredeterminados;
+        });
+      }
+    }
   }
 
   int? _lastIncidenteId;
@@ -44,7 +71,6 @@ class _IncidenteSectionState extends State<IncidenteSection> {
     if (mounted) {
       final incidente = _ingresoController.incidenteActual;
       
-      // Sincronización de descripción
       if (incidente.idIncidente != _lastIncidenteId) {
         _lastIncidenteId = incidente.idIncidente;
         _descripcionIncidenteController.text = incidente.descripcion ?? '';
@@ -65,13 +91,11 @@ class _IncidenteSectionState extends State<IncidenteSection> {
         try {
           bool initialized = await _speech.initialize(
             onStatus: (status) {
-              debugPrint('Speech status: $status');
               if (status == 'done' || status == 'notListening') {
                 setState(() => _isListening = false);
               }
             },
             onError: (errorNotification) {
-              debugPrint('Speech error: $errorNotification');
               setState(() => _isListening = false);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -84,22 +108,24 @@ class _IncidenteSectionState extends State<IncidenteSection> {
           if (initialized) {
             _speechAvailable = true;
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('El reconocimiento de voz no está disponible en este dispositivo')),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('El reconocimiento de voz no está disponible en este dispositivo')),
+              );
+            }
             return;
           }
         } catch (e) {
-          debugPrint('Speech initialization exception: $e');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No se pudo iniciar el servicio de voz. Revisa los permisos de micrófono.')),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No se pudo iniciar el servicio de voz. Revisa los permisos de micrófono.')),
+            );
+          }
           return;
         }
       }
 
       _textBeforeListening = _descripcionIncidenteController.text;
-      
       setState(() => _isListening = true);
 
       _speech.listen(
@@ -114,19 +140,15 @@ class _IncidenteSectionState extends State<IncidenteSection> {
                 final separator = (lastChar == ' ' || lastChar == '\n') ? '' : ' ';
                 _descripcionIncidenteController.text = '$_textBeforeListening$separator$recognized';
               }
-              // Mover cursor al final
               _descripcionIncidenteController.selection = TextSelection.fromPosition(
                 TextPosition(offset: _descripcionIncidenteController.text.length),
               );
-              // Sincronizar con el socket en tiempo real
               SocketService().updateField('descripcion', _descripcionIncidenteController.text);
-              // Sincronizar con el controller
               _ingresoController.updateIncidente(descripcion: _descripcionIncidenteController.text);
             }
           });
         },
         localeId: 'es_AR',
-        cancelOnError: true,
       );
     } else {
       setState(() => _isListening = false);
@@ -145,19 +167,21 @@ class _IncidenteSectionState extends State<IncidenteSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+    final protocolosList = _protocolosDinamicos.isNotEmpty ? _protocolosDinamicos : _protocolosPredeterminados;
+    final codigoTriage = _ingresoController.incidenteActual.codigoTriage;
+    final tieneProtocolos = _ingresoController.protocolosSeleccionados.isNotEmpty;
+    final esRojo = codigoTriage == 'Rojo' || tieneProtocolos;
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Protocolos rápidos:', style: theme.textTheme.labelMedium?.copyWith(color: Colors.white54)),
-          const SizedBox(height: 8),
           SingleChildScrollView(
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _protocolosSugeridos.map((protoData) {
+              children: protocolosList.map((protoData) {
                 final protocolo = protoData['nombre'] as String;
                 final color = protoData['color'] as Color;
                 final isSelected = _ingresoController.protocolosSeleccionados.contains(protocolo);
@@ -167,15 +191,15 @@ class _IncidenteSectionState extends State<IncidenteSection> {
                     protocolo, 
                     style: TextStyle(
                       fontSize: 12,
-                      color: isSelected ? Colors.white : color.withOpacity(0.9),
+                      color: isSelected ? Colors.white : color.withValues(alpha: 0.9),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   backgroundColor: isSelected 
-                      ? color.withOpacity(0.4) 
-                      : color.withOpacity(0.1),
+                      ? color.withValues(alpha: 0.4) 
+                      : color.withValues(alpha: 0.1),
                   side: BorderSide(
-                    color: isSelected ? color : color.withOpacity(0.3),
+                    color: isSelected ? color : color.withValues(alpha: 0.3),
                   ),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   onPressed: () {
@@ -194,15 +218,17 @@ class _IncidenteSectionState extends State<IncidenteSection> {
                       _ingresoController.updateIncidente(codigoTriage: '');
                       _ingresoController.updateTodasLasVictimas(codigoTriage: '');
                     }
+                    setState(() {});
                   },
                 );
               }).toList(),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _buildTriageBanner(theme),
           const SizedBox(height: 16),
-           Expanded(
+          
+          Expanded(
             child: CollabTextField(
               fieldId: 'descripcion',
               label: 'Descripción del incidente',
@@ -226,7 +252,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
                       child: IconButton(
                         icon: Icon(
                           _isListening ? Icons.mic : Icons.mic_none,
-                          color: _isListening ? Colors.redAccent : Colors.white70,
+                          color: _isListening ? Colors.red : theme.colorScheme.primary,
                         ),
                         onPressed: _toggleListening,
                       ),
@@ -236,58 +262,51 @@ class _IncidenteSectionState extends State<IncidenteSection> {
               ),
             ),
           ),
-          if (widget.onDespacho != null && (_ingresoController.incidenteActual.codigoTriage == 'Rojo' || _ingresoController.protocolosSeleccionados.isNotEmpty)) ...[
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: widget.onDespacho,
-                icon: const Icon(Icons.local_shipping_rounded),
-                label: const Text('DESPACHO RÁPIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  foregroundColor: theme.colorScheme.primary,
-                  side: BorderSide(color: theme.colorScheme.primary, width: 1.0),
-                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
   Widget _buildTriageBanner(ThemeData theme) {
-    final codigoTriage = _ingresoController.incidenteActual.codigoTriage;
-    final esRojo = codigoTriage == 'Rojo' || _ingresoController.protocolosSeleccionados.isNotEmpty;
-
-    if (!esRojo) {
+    final triage = _ingresoController.incidenteActual.codigoTriage;
+    if (triage == null || triage.trim().isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final codeColor = Colors.red.shade600;
-    const codeText = 'ROJO - EMERGENCIA CRÍTICA';
+    Color bannerColor = Colors.grey;
+    String text = 'TRIAGE DEL INCIDENTE: NO ASIGNADO';
+
+    if (triage == 'Rojo') {
+      bannerColor = Colors.red.shade600;
+      text = 'ROJO - EMERGENCIA CRÍTICA';
+    } else if (triage == 'Amarillo') {
+      bannerColor = Colors.yellow.shade700;
+      text = 'AMARILLO - URGENCIA';
+    } else if (triage == 'Verde') {
+      bannerColor = Colors.green.shade600;
+      text = 'VERDE - NO URGENTE';
+    }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: codeColor.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: codeColor, width: 2),
+        color: bannerColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: bannerColor.withValues(alpha: 0.5), width: 1.5),
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_rounded, color: codeColor, size: 28),
-          const SizedBox(width: 16),
+          Icon(Icons.warning_rounded, color: bannerColor, size: 24),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'CÓDIGO INCIDENTE: $codeText',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: codeColor,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
+              text, 
+              style: TextStyle(
+                color: bannerColor == Colors.grey ? Colors.white70 : bannerColor, 
+                fontWeight: FontWeight.bold, 
+                fontSize: 13,
+                letterSpacing: 0.8,
               ),
             ),
           ),
@@ -296,3 +315,5 @@ class _IncidenteSectionState extends State<IncidenteSection> {
     );
   }
 }
+
+

@@ -355,26 +355,6 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                 children: victimas.asMap().entries.map((e) => _buildVictimaForm(theme, e.key, e.value, locks)).toList(),
               ),
             ),
-            if (widget.onDespacho != null) ...[
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onDespacho,
-                    icon: const Icon(Icons.local_shipping_rounded),
-                    label: const Text('DESPACHO RÁPIDO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary.withOpacity(0.15),
-                      foregroundColor: theme.colorScheme.primary,
-                      side: BorderSide(color: theme.colorScheme.primary, width: 1.0),
-                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
         );
       },
@@ -676,44 +656,8 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
               ),
             ),
           ),
-          _buildTriageSelector(index, victima),
         ],
       ),
     );
   }
-
-  Widget _buildTriageSelector(int index, VictimaData victima) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildTriageOptionButton(index, victima, 'Verde', Colors.green),
-        const SizedBox(width: 8),
-        _buildTriageOptionButton(index, victima, 'Amarillo', Colors.yellow),
-        const SizedBox(width: 8),
-        _buildTriageOptionButton(index, victima, 'Rojo', Colors.red),
-      ],
-    );
-  }
-
-  Widget _buildTriageOptionButton(int index, VictimaData victima, String code, Color color) {
-    final isSelected = victima.codigoTriage == code;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () => _ingresoController.updateVictima(index, codigoTriage: code),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? color : color.withValues(alpha: 0.2),
-            border: Border.all(color: color, width: 2),
-          ),
-          child: isSelected ? const Icon(Icons.check, size: 16, color: Colors.black) : null,
-        ),
-      ),
-    );
-  }
-
-
 }

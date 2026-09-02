@@ -87,6 +87,8 @@ class _ListadosPageState extends State<ListadosPage> {
             priority = 'AMARILLA';
           } else if (idConfCode == 31) {
             priority = 'VERDE';
+          } else if (idConfCode == null && (priority == null || priority.toString().trim().isEmpty)) {
+            priority = 'SIN CÓDIGO';
           }
 
           Color priorityColor;
@@ -105,18 +107,11 @@ class _ListadosPageState extends State<ListadosPage> {
               priority = 'VERDE';
               priorityColor = AppColors.accentGreen;
               break;
+            case 'SIN CÓDIGO':
+            case 'SIN CODIGO':
             default:
-              final descLower = (incident['descripcion'] ?? '').toString().toLowerCase();
-              if (descLower.contains('dolor tor') || descLower.contains('trauma') || descLower.contains('atrapado')) {
-                priority = 'ROJA';
-                priorityColor = AppColors.accentRed;
-              } else if (descLower.contains('colisión') || descLower.contains('vial')) {
-                priority = 'AMARILLA';
-                priorityColor = Colors.orangeAccent;
-              } else {
-                priority = 'VERDE';
-                priorityColor = AppColors.accentGreen;
-              }
+              priority = 'SIN CÓDIGO';
+              priorityColor = Colors.grey;
           }
 
           List<MovilStatus> moviles = [];

@@ -606,11 +606,11 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
                   ),
                 ),
               ),
-              // Tipo
+              // Tipo / Triage
               Expanded(
                 flex: flex[2],
                 child: Text(
-                  demanda.tipoIngreso?.descripcion ?? 'N/A',
+                  demanda.incidente?.codigoTriage ?? demanda.estado?.descripcion ?? demanda.tipoIngreso?.descripcion ?? 'N/A',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.87),
                   ),

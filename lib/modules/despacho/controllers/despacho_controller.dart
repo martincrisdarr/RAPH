@@ -41,6 +41,33 @@ class DespachoController extends ChangeNotifier {
   static const String _unidadesKey = 'despacho_unidades';
   static const String _movilesKey = 'despacho_moviles';
 
+  void _ordenarMoviles() {
+    _moviles.sort((a, b) {
+      int getPrioridad(Movil m) {
+        final estadoLower = m.estado.trim().toLowerCase();
+        if (m.idmovilEstado == 1 || estadoLower == 'disponible') {
+          return 1;
+        }
+        if (m.idIncidenteActivo != null ||
+            m.idmovilEstado == 2 ||
+            estadoLower == 'despachado' ||
+            estadoLower == 'en sitio' ||
+            estadoLower == 'traslado' ||
+            estadoLower == 'arribado') {
+          return 2;
+        }
+        return 3;
+      }
+
+      final pA = getPrioridad(a);
+      final pB = getPrioridad(b);
+      if (pA != pB) {
+        return pA.compareTo(pB);
+      }
+      return a.nombre.compareTo(b.nombre);
+    });
+  }
+
   int? getIdEstadoPorNombre(String estadoNombre) {
     if (_estadosMovil.isEmpty) return null;
     final found = _estadosMovil.firstWhere(
@@ -128,6 +155,7 @@ class DespachoController extends ChangeNotifier {
       if (movilesJson != null) {
         final List<dynamic> decoded = jsonDecode(movilesJson);
         _moviles = decoded.map((e) => Movil.fromJson(e)).toList();
+        _ordenarMoviles();
       } else {
         _cargarMovilesPredeterminados();
       }
@@ -344,175 +372,10 @@ class DespachoController extends ChangeNotifier {
           }
         }
       }
-
-      // Solo agregar incidentes simulados si el backend no devolvió ninguna demanda
-      if (_incidentesActivos.isEmpty && raw.isEmpty) {
-        _incidentesActivos = [
-          DemandaRecibida(
-            idDemandaRecibida: 101,
-            fechaHora: DateTime.now().subtract(const Duration(minutes: 15)),
-            apellidoNombre: 'Juan Carlos Pérez',
-            dni: '24333888',
-            idCfgEstado: 5,
-            usuario: 'Ingreso RAPH',
-            incidente: Incidente(
-              idIncidente: 901,
-              idConfCodigo: 29,
-              codigoTriage: 'Rojo',
-              direccion: 'Av. Argentina 250, Neuquén',
-              descripcion: 'Paciente de 45 años con dolor torácico agudo y disnea.',
-              latitud: -38.9516,
-              longitud: -68.0591,
-              fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 15)),
-              victimas: [
-                Victima(
-                  idVictima: 801,
-                  nombresApellidos: 'Juan Carlos Pérez',
-                  dni: 24333888,
-                  edad: 45,
-                  idConfGenero: 1,
-                  observaciones: 'Paciente principal con dolor torácico agudo y disnea.',
-                ),
-                Victima(
-                  idVictima: 804,
-                  nombresApellidos: 'Esteban Quito',
-                  dni: 39555666,
-                  edad: 28,
-                  idConfGenero: 1,
-                  observaciones: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
-                ),
-              ],
-            ),
-          ),
-          DemandaRecibida(
-            idDemandaRecibida: 102,
-            fechaHora: DateTime.now().subtract(const Duration(minutes: 8)),
-            apellidoNombre: 'Marta Gómez',
-            dni: '18444555',
-            idCfgEstado: 6,
-            usuario: 'Llamada 107',
-            incidente: Incidente(
-              idIncidente: 902,
-              idConfCodigo: 30,
-              codigoTriage: 'Amarillo',
-              direccion: 'Ruta 22 y Cnel. Olascoaga, Neuquén',
-              descripcion: 'Colisión de dos autos. Un conductor atrapado con traumatismos múltiples.',
-              latitud: -38.9592,
-              longitud: -68.0588,
-              fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 8)),
-              victimas: [
-                Victima(
-                  idVictima: 802,
-                  nombresApellidos: 'Marta Gómez',
-                  dni: 18444555,
-                  edad: 52,
-                  idConfGenero: 2,
-                  observaciones: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
-                ),
-                Victima(
-                  idVictima: 803,
-                  nombresApellidos: 'Carlos López',
-                  dni: 32111222,
-                  edad: 30,
-                  idConfGenero: 1,
-                  observaciones: 'Acompañante con heridas cortantes leves en rostro y manos.',
-                ),
-                Victima(
-                  idVictima: 805,
-                  nombresApellidos: 'Lucía Fernández',
-                  dni: 42111333,
-                  edad: 24,
-                  idConfGenero: 2,
-                  observaciones: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
-                ),
-              ],
-            ),
-          ),
-        ];
-      }
-
+      _ordenarMoviles();
       notifyListeners();
     } catch (e) {
       print('[DespachoController] Error al obtener incidentes del backend: $e');
-      // Fallback a mock si falla la red
-      _incidentesActivos = [
-        DemandaRecibida(
-          idDemandaRecibida: 101,
-          fechaHora: DateTime.now().subtract(const Duration(minutes: 15)),
-          apellidoNombre: 'Juan Carlos Pérez',
-          dni: '24333888',
-          idCfgEstado: 5,
-          usuario: 'Ingreso RAPH',
-          incidente: Incidente(
-            idIncidente: 901,
-            direccion: 'Av. Argentina 250, Neuquén',
-            descripcion: 'Paciente de 45 años con dolor torácico agudo y disnea.',
-            latitud: -38.9516,
-            longitud: -68.0591,
-            fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 15)),
-            victimas: [
-              Victima(
-                idVictima: 801,
-                nombresApellidos: 'Juan Carlos Pérez',
-                dni: 24333888,
-                edad: 45,
-                idConfGenero: 1,
-                observaciones: 'Paciente principal con dolor torácico agudo y disnea.',
-              ),
-              Victima(
-                idVictima: 804,
-                nombresApellidos: 'Esteban Quito',
-                dni: 39555666,
-                edad: 28,
-                idConfGenero: 1,
-                observaciones: 'Familiar en el lugar, presenta crisis de ansiedad y taquicardia.',
-              ),
-            ],
-          ),
-        ),
-        DemandaRecibida(
-          idDemandaRecibida: 102,
-          fechaHora: DateTime.now().subtract(const Duration(minutes: 8)),
-          apellidoNombre: 'Marta Gómez',
-          dni: '18444555',
-          idCfgEstado: 6,
-          usuario: 'Llamada 107',
-          incidente: Incidente(
-            idIncidente: 902,
-            direccion: 'Ruta 22 y Cnel. Olascoaga, Neuquén',
-            descripcion: 'Colisión de dos autos. Un conductor atrapado con traumatismos múltiples.',
-            latitud: -38.9592,
-            longitud: -68.0588,
-            fechaHoraAuto: DateTime.now().subtract(const Duration(minutes: 8)),
-            victimas: [
-              Victima(
-                idVictima: 802,
-                nombresApellidos: 'Marta Gómez',
-                dni: 18444555,
-                edad: 52,
-                idConfGenero: 2,
-                observaciones: 'Conductora atrapada con traumatismos múltiples y dolor cervical.',
-              ),
-              Victima(
-                idVictima: 803,
-                nombresApellidos: 'Carlos López',
-                dni: 32111222,
-                edad: 30,
-                idConfGenero: 1,
-                observaciones: 'Acompañante con heridas cortantes leves en rostro y manos.',
-              ),
-              Victima(
-                idVictima: 805,
-                nombresApellidos: 'Lucía Fernández',
-                dni: 42111333,
-                edad: 24,
-                idConfGenero: 2,
-                observaciones: 'Peatón rozado por la colisión, presenta escoriaciones múltiples.',
-              ),
-            ],
-          ),
-        ),
-      ];
       notifyListeners();
     } finally {
       _isIncidentesLoading = false;
@@ -531,6 +394,7 @@ class DespachoController extends ChangeNotifier {
 
   Future<void> _guardarMoviles() async {
     try {
+      _ordenarMoviles();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_movilesKey, jsonEncode(_moviles.map((e) => e.toJson()).toList()));
     } catch (e) {
@@ -799,6 +663,7 @@ class DespachoController extends ChangeNotifier {
         try {
           final res = await DespachoService.registrarDespacho(
             idVictima: idVictima,
+            idIncidente: idIncidente,
             idMovilUnidad: idMovilInt,
             observacion: 'Despacho asignado desde RAPH Web para víctima #$idVictima',
           );
@@ -810,6 +675,59 @@ class DespachoController extends ChangeNotifier {
           }
         } catch (e) {
           print('[DespachoController] Error al registrar despacho en la tabla ser_sien_dsp_despacho: $e');
+        }
+      }
+    }
+
+      _guardarMoviles();
+    notifyListeners();
+  }
+
+  void despacharMovilAIncidenteSinVictima(int idIncidente, String idMovil) async {
+    final incIndex = _incidentesActivos.indexWhere(
+      (element) => element.incidente?.idIncidente == idIncidente || element.idDemandaRecibida == idIncidente
+    );
+    if (incIndex == -1) return;
+
+    final incident = _incidentesActivos[incIndex].incidente;
+    if (incident == null) return;
+
+    final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
+    if (mIndex != -1) {
+      double offsetLat = 0.002;
+      double offsetLng = 0.002;
+      double destLat = (incident.latitud ?? -38.9516) + offsetLat;
+      double destLng = (incident.longitud ?? -68.0591) + offsetLng;
+      final idEstadoDespachado = getIdEstadoPorNombre('Despachado');
+
+      final movilActualizado = _moviles[mIndex].copyWith(
+        estado: 'Despachado',
+        idmovilEstado: idEstadoDespachado,
+        idIncidenteActivo: idIncidente,
+        latitud: destLat,
+        longitud: destLng,
+      );
+
+      _moviles[mIndex] = movilActualizado;
+
+      try {
+        await MovilService.actualizarMovil(movilActualizado);
+      } catch (e) {
+        print('[DespachoController] Error al sincronizar despacho con backend: $e');
+      }
+
+      final cleanIdMovil = movilActualizado.id.replaceAll(RegExp(r'[^0-9]'), '');
+      final idMovilInt = cleanIdMovil.isNotEmpty ? int.tryParse(cleanIdMovil) : null;
+
+      if (idMovilInt != null) {
+        try {
+          await DespachoService.registrarDespacho(
+            idIncidente: idIncidente,
+            idMovilUnidad: idMovilInt,
+            observacion: 'Despacho Rápido emitido desde pantalla Despachos',
+          );
+        } catch (e) {
+          print('[DespachoController] Error al registrar despacho sin víctima: $e');
         }
       }
     }
