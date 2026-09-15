@@ -22,11 +22,12 @@ class VictimaData {
 
   Victima toVictima(int? idIncidente) {
     int? idConfCodigo;
-    if (codigoTriage == 'Rojo') {
+    final triage = codigoTriage?.toLowerCase();
+    if (triage == 'rojo') {
       idConfCodigo = 29;
-    } else if (codigoTriage == 'Amarillo') {
+    } else if (triage == 'amarillo') {
       idConfCodigo = 30;
-    } else if (codigoTriage == 'Verde') {
+    } else if (triage == 'verde') {
       idConfCodigo = 31;
     }
 

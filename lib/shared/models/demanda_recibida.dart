@@ -31,19 +31,25 @@ class DemandaRecibida {
   });
 
   factory DemandaRecibida.fromJson(Map<String, dynamic> json) {
+    final map = json.containsKey('data') && json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
+
+    final idDemanda = map['iddemandarecibida'] ?? map['idDemandaRecibida'] ?? map['id'];
+
     return DemandaRecibida(
-      idDemandaRecibida: json['iddemandarecibida'] != null ? int.tryParse(json['iddemandarecibida'].toString()) : null,
-      fechaHora: json['fechahora'] != null ? DateTime.tryParse(json['fechahora']) : null,
-      usuario: json['usuario'],
-      idCfgTipoIngreso: json['idcfg_tipo_ingreso'] != null ? int.tryParse(json['idcfg_tipo_ingreso'].toString()) : null,
-      nroLlamadaEntrante: json['nro_llamada_entrante'] != null ? int.tryParse(json['nro_llamada_entrante'].toString()) : null,
-      apellidoNombre: json['apellido_nombre'],
-      dni: json['dni'],
-      idCfgEstado: json['idcfg_estado'] != null ? int.tryParse(json['idcfg_estado'].toString()) : null,
-      idIncidente: json['idincidente'] != null ? int.tryParse(json['idincidente'].toString()) : null,
-      estado: json['estado'] != null ? Configuracion.fromJson(json['estado']) : null,
-      tipoIngreso: json['tipo_ingreso'] != null ? Configuracion.fromJson(json['tipo_ingreso']) : null,
-      incidente: json['incidente'] != null ? Incidente.fromJson(json['incidente']) : null,
+      idDemandaRecibida: idDemanda != null ? int.tryParse(idDemanda.toString()) : null,
+      fechaHora: map['fechahora'] != null ? DateTime.tryParse(map['fechahora']) : null,
+      usuario: map['usuario'],
+      idCfgTipoIngreso: map['idcfg_tipo_ingreso'] != null ? int.tryParse(map['idcfg_tipo_ingreso'].toString()) : null,
+      nroLlamadaEntrante: map['nro_llamada_entrante'] != null ? int.tryParse(map['nro_llamada_entrante'].toString()) : null,
+      apellidoNombre: map['apellido_nombre'],
+      dni: map['dni'],
+      idCfgEstado: map['idcfg_estado'] != null ? int.tryParse(map['idcfg_estado'].toString()) : null,
+      idIncidente: map['idincidente'] != null ? int.tryParse(map['idincidente'].toString()) : null,
+      estado: map['estado'] != null ? Configuracion.fromJson(map['estado']) : null,
+      tipoIngreso: map['tipo_ingreso'] != null ? Configuracion.fromJson(map['tipo_ingreso']) : null,
+      incidente: map['incidente'] != null ? Incidente.fromJson(map['incidente']) : null,
     );
   }
 

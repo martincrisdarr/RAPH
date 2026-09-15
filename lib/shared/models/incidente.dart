@@ -11,6 +11,7 @@ class Incidente {
   final String? descripcion;
   final int? idConfCodigo;
   final String? codigoTriage;
+  final String? protocolosIds;
   final String? reporte;
   final DateTime? fechaHoraAuto;
   final int? activo;
@@ -27,6 +28,7 @@ class Incidente {
     this.descripcion,
     this.idConfCodigo,
     this.codigoTriage,
+    this.protocolosIds,
     this.reporte,
     this.fechaHoraAuto,
     this.activo = 1,
@@ -35,12 +37,20 @@ class Incidente {
   });
 
   factory Incidente.fromJson(Map<String, dynamic> json) {
-    int? parsedIdConf = json['idconf_codigo'] != null ? int.tryParse(json['idconf_codigo'].toString()) : null;
-    String? triage = json['codigo_triage'];
+    int? parsedIdConf = json['idconf_codigo'] != null
+        ? int.tryParse(json['idconf_codigo'].toString())
+        : (json['idconf_estado'] != null ? int.tryParse(json['idconf_estado'].toString()) : null);
+    String? triage = json['codigo_triage'] ?? json['triage'];
     if (triage == null && parsedIdConf != null) {
-      if (parsedIdConf == 29) triage = 'Rojo';
-      else if (parsedIdConf == 30) triage = 'Amarillo';
-      else if (parsedIdConf == 31) triage = 'Verde';
+      if (parsedIdConf == 29 || parsedIdConf == 135) {
+        triage = 'Rojo';
+      } else if (parsedIdConf == 30) {
+        triage = 'Amarillo';
+      } else if (parsedIdConf == 31) {
+        triage = 'Verde';
+      } else if (parsedIdConf == 63) {
+        triage = 'Sin código';
+      }
     }
 
     return Incidente(
@@ -53,6 +63,7 @@ class Incidente {
       descripcion: json['descripcion'],
       idConfCodigo: parsedIdConf,
       codigoTriage: triage,
+      protocolosIds: json['protocolos_ids'],
       reporte: json['reporte'],
       fechaHoraAuto: json['fechahoraauto'] != null ? DateTime.tryParse(json['fechahoraauto']) : null,
       activo: json['activo'] != null ? int.tryParse(json['activo'].toString()) : 1,
@@ -64,10 +75,16 @@ class Incidente {
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
     int? finalIdConf = idConfCodigo;
-    if (finalIdConf == null && codigoTriage != null) {
-      if (codigoTriage == 'Rojo') finalIdConf = 29;
-      else if (codigoTriage == 'Amarillo') finalIdConf = 30;
-      else if (codigoTriage == 'Verde') finalIdConf = 31;
+    if (finalIdConf == null && codigoTriage != null && codigoTriage!.isNotEmpty) {
+      if (codigoTriage == 'Rojo') {
+        finalIdConf = 29;
+      } else if (codigoTriage == 'Amarillo') {
+        finalIdConf = 30;
+      } else if (codigoTriage == 'Verde') {
+        finalIdConf = 31;
+      } else if (codigoTriage?.toLowerCase().contains('sin') == true) {
+        finalIdConf = 63;
+      }
     }
 
     if (idIncidente != null) map['idincidente'] = idIncidente;
@@ -77,8 +94,12 @@ class Incidente {
     if (longitud != null) map['longitud'] = longitud;
     if (direccionAuto != null) map['direccion_auto'] = direccionAuto;
     if (descripcion != null) map['descripcion'] = descripcion;
-    if (finalIdConf != null) map['idconf_codigo'] = finalIdConf;
-    if (codigoTriage != null) map['codigo_triage'] = codigoTriage;
+
+    // Código / Triage / Estado del incidente:
+    // Se envía explícitamente finalIdConf (entero o null) para que al desmarcar etiquetas limpie el código en la base de datos
+    map['idconf_codigo'] = finalIdConf;
+    if (protocolosIds != null) map['protocolos_ids'] = protocolosIds;
+
     if (reporte != null) map['reporte'] = reporte;
     if (fechaHoraAuto != null) map['fechahoraauto'] = fechaHoraAuto?.toIso8601String();
     if (activo != null) map['activo'] = activo;
@@ -96,7 +117,10 @@ class Incidente {
     String? direccionAuto,
     String? descripcion,
     int? idConfCodigo,
+    bool clearIdConfCodigo = false,
     String? codigoTriage,
+    bool clearCodigoTriage = false,
+    String? protocolosIds,
     String? reporte,
     DateTime? fechaHoraAuto,
     int? activo,
@@ -111,8 +135,9 @@ class Incidente {
       longitud: longitud ?? this.longitud,
       direccionAuto: direccionAuto ?? this.direccionAuto,
       descripcion: descripcion ?? this.descripcion,
-      idConfCodigo: idConfCodigo ?? this.idConfCodigo,
-      codigoTriage: codigoTriage ?? this.codigoTriage,
+      idConfCodigo: clearIdConfCodigo ? null : (idConfCodigo ?? this.idConfCodigo),
+      codigoTriage: clearCodigoTriage ? null : (codigoTriage ?? this.codigoTriage),
+      protocolosIds: protocolosIds ?? this.protocolosIds,
       reporte: reporte ?? this.reporte,
       fechaHoraAuto: fechaHoraAuto ?? this.fechaHoraAuto,
       activo: activo ?? this.activo,

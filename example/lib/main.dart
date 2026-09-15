@@ -24,6 +24,8 @@ class AutoLoginSession implements IUserSession {
     await prefs.remove('dev_user_nombre');
     await prefs.remove('dev_user_apellido');
     await prefs.remove('dev_user_email');
+    await prefs.remove('dev_user_organismo');
+    await prefs.remove('dev_user_roles');
     _onLogout?.call();
   }
 }
@@ -60,9 +62,17 @@ class _DevLoginAppState extends State<DevLoginApp> {
       final nombre = prefs.getString('dev_user_nombre') ?? '';
       final apellido = prefs.getString('dev_user_apellido') ?? '';
       final email = prefs.getString('dev_user_email') ?? '';
+      final organismo = prefs.getString('dev_user_organismo');
+      final roles = prefs.getStringList('dev_user_roles') ?? const [];
       setState(() {
         _session = AutoLoginSession(
-          UserData(nombre: nombre, apellido: apellido, email: email),
+          UserData(
+            nombre: nombre,
+            apellido: apellido,
+            email: email,
+            nombreOrganismo: organismo,
+            roles: roles,
+          ),
           token,
           onLogout: () => setState(() => _session = null),
         );
@@ -100,10 +110,20 @@ class _DevLoginAppState extends State<DevLoginApp> {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           final userData = data['usuario'] ?? {};
+          final rawRoles = userData['roles'];
+          final List<String> userRoles = (rawRoles is List)
+              ? rawRoles.map((e) => e.toString()).toList()
+              : (userData['rol'] != null ? [userData['rol'].toString()] : const []);
+
           final simulatedUser = UserData(
             nombre: userData['nombre']?.toString() ?? username,
             apellido: userData['apellido']?.toString() ?? '',
-            email: userData['mail']?.toString() ?? '',
+            email: userData['mail']?.toString() ?? userData['email']?.toString() ?? '',
+            idOrganismo: int.tryParse(userData['idorganismo']?.toString() ?? ''),
+            nombreOrganismo: userData['organismo']?.toString() ??
+                userData['nombreOrganismo']?.toString() ??
+                userData['nombre_organismo']?.toString(),
+            roles: userRoles,
           );
           final token = data['token']?.toString() ?? '';
 
@@ -113,6 +133,16 @@ class _DevLoginAppState extends State<DevLoginApp> {
           await prefs.setString('dev_user_nombre', simulatedUser.nombre);
           await prefs.setString('dev_user_apellido', simulatedUser.apellido);
           await prefs.setString('dev_user_email', simulatedUser.email);
+          if (simulatedUser.nombreOrganismo != null) {
+            await prefs.setString('dev_user_organismo', simulatedUser.nombreOrganismo!);
+          } else {
+            await prefs.remove('dev_user_organismo');
+          }
+          if (simulatedUser.roles.isNotEmpty) {
+            await prefs.setStringList('dev_user_roles', simulatedUser.roles);
+          } else {
+            await prefs.remove('dev_user_roles');
+          }
 
           setState(() {
             _session = AutoLoginSession(

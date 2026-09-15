@@ -95,20 +95,8 @@ class _CustomSelectState<T> extends State<CustomSelect<T>> {
       } catch (_) {
         _resolvedInitialSelection = null;
       }
-    } else if (widget.initialSelectionId == null && _items.isNotEmpty) {
-      try {
-        _resolvedInitialSelection = _items.firstWhere(
-          (item) => widget.itemLabel(item).toUpperCase().contains('NUEVO'),
-          orElse: () => _items.first,
-        );
-        if (_resolvedInitialSelection != null && widget.onSelected != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.onSelected!(_resolvedInitialSelection);
-          });
-        }
-      } catch (_) {
-        _resolvedInitialSelection = null;
-      }
+    } else {
+      _resolvedInitialSelection = null;
     }
     if (mounted) setState(() {});
   }

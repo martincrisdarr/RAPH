@@ -34,27 +34,58 @@ class _UbicacionSectionState extends State<UbicacionSection> {
     provinciaNombre: "Neuquén",
   );
 
-  /// Parsea coordenadas del parámetro ?q=lat,lng de un link de Google Maps.
-  /// Soporta formatos como:
-  ///   https://www.google.com/maps?q=-38.95,-68.06&z=17&hl=es
-  ///   https://maps.google.com/?q=-38.95,-68.06
+  /// Parsea coordenadas de diversos formatos de links de Google Maps / WhatsApp:
+  /// 1. Marcador exacto: .../data=!3d-38.95!4d-68.06
+  /// 2. Vista de cámara: .../@-38.95,-68.06,17z
+  /// 3. Parámetro de búsqueda/WhatsApp: ...?q=-38.95,-68.06 o ?query=-38.95,-68.06
+  /// 4. Coordenadas directas: "-38.95, -68.06"
   LatLng? _parseCoordsFromUrl(String url) {
     try {
-      final uri = Uri.parse(url.trim());
-      final q = uri.queryParameters['q'];
-      if (q != null && q.contains(',')) {
-        final parts = q.split(',');
-        if (parts.length >= 2) {
-          final lat = double.tryParse(parts[0].trim());
-          final lng = double.tryParse(parts[1].trim());
-          if (lat != null && lng != null) return LatLng(lat, lng);
+      final text = url.trim();
+
+      // 1. Pin exacto en URLs de Google Maps /place/ (!3d<lat>!4d<lng>)
+      final matchData = RegExp(r'!3d(-?\d+(?:\.\d+)?).*?!4d(-?\d+(?:\.\d+)?)').firstMatch(text);
+      if (matchData != null) {
+        final lat = double.tryParse(matchData.group(1)!);
+        final lng = double.tryParse(matchData.group(2)!);
+        if (lat != null && lng != null) return LatLng(lat, lng);
+      }
+
+      // 2. Posición de cámara en URL /@<lat>,<lng>
+      final matchAt = RegExp(r'@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)').firstMatch(text);
+      if (matchAt != null) {
+        final lat = double.tryParse(matchAt.group(1)!);
+        final lng = double.tryParse(matchAt.group(2)!);
+        if (lat != null && lng != null) return LatLng(lat, lng);
+      }
+
+      // 3. Parámetros query ?q=lat,lng o ?query=lat,lng (links compartidos directo de WhatsApp)
+      final uri = Uri.tryParse(text);
+      if (uri != null) {
+        final q = uri.queryParameters['q'] ?? uri.queryParameters['query'];
+        if (q != null && q.contains(',')) {
+          final parts = q.split(',');
+          if (parts.length >= 2) {
+            final lat = double.tryParse(parts[0].trim());
+            final lng = double.tryParse(parts[1].trim());
+            if (lat != null && lng != null) return LatLng(lat, lng);
+          }
         }
+      }
+
+      // 4. Coordenadas crudas pegadas directamente ("lat, lng")
+      final matchRaw = RegExp(r'^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$').firstMatch(text);
+      if (matchRaw != null) {
+        final lat = double.tryParse(matchRaw.group(1)!);
+        final lng = double.tryParse(matchRaw.group(2)!);
+        if (lat != null && lng != null) return LatLng(lat, lng);
       }
     } catch (_) {}
     return null;
   }
 
   Future<void> _buscarDireccionEnMapa() async {
+    if (_isLoadingMap) return;
     final texto = _domicilioController.text.trim();
     if (texto.isEmpty) return;
 
@@ -83,39 +114,44 @@ class _UbicacionSectionState extends State<UbicacionSection> {
     }
 
     if (coords != null) {
-      // Mover la cámara del mapa
-      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(coords, 16));
-      _ingresoController.updateIncidente(
-        latitud: coords.latitude,
-        longitud: coords.longitude,
-      );
-
-      setState(() => _isLoadingMap = false);
-
+      String direccionFinal = texto;
       if (_isLinkMode) {
         final address = await GeocodingService.getAddressFromCoordinates(
           coords.latitude,
           coords.longitude,
         );
         if (address != null) {
+          direccionFinal = address;
           _domicilioController.text = address;
-          _ingresoController.updateIncidente(direccion: address);
           setState(() => _isLinkMode = false);
         }
-      } else {
-        _ingresoController.updateIncidente(direccion: texto);
       }
-      // Sincronizar con el backend con los datos finales del mapa
+
+      // Mover la cámara del mapa
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(coords, 16));
+      _ingresoController.updateIncidente(
+        latitud: coords.latitude,
+        longitud: coords.longitude,
+        direccion: direccionFinal,
+      );
+
+      setState(() => _isLoadingMap = false);
+
+      // Sincronizar con el backend con los datos finales del mapa (POST si es nuevo, PUT si ya existe)
       await _ingresoController.syncIncidenteDesdeGoogleMaps();
     } else {
       setState(() => _isLoadingMap = false);
+      // Si no se ubicó en el mapa, registrar de todas formas el incidente con la dirección ingresada
+      _ingresoController.updateIncidente(direccion: texto);
+      await _ingresoController.syncIncidenteDesdeGoogleMaps();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               _localidadSeleccionada != null
-                  ? 'No se encontró la dirección en ${_localidadSeleccionada!.descripcion}'
-                  : 'No se encontró la dirección',
+                  ? 'No se encontraron coordenadas en ${_localidadSeleccionada!.descripcion}. Se guardó con dirección de texto.'
+                  : 'No se encontraron coordenadas en el mapa. Se guardó con dirección de texto.',
             ),
           ),
         );
@@ -124,19 +160,19 @@ class _UbicacionSectionState extends State<UbicacionSection> {
   }
 
   Future<void> _buscarDireccionPorCoordenadas(LatLng coords) async {
-    _ingresoController.updateIncidente(
-      latitud: coords.latitude,
-      longitud: coords.longitude,
-    );
-    
     setState(() => _isLoadingMap = true);
     final address = await GeocodingService.getAddressFromCoordinates(coords.latitude, coords.longitude);
     setState(() => _isLoadingMap = false);
 
     if (address != null) {
       _domicilioController.text = address;
-      _ingresoController.updateIncidente(direccion: address);
     }
+
+    _ingresoController.updateIncidente(
+      latitud: coords.latitude,
+      longitud: coords.longitude,
+      direccion: address ?? _domicilioController.text,
+    );
 
     // Sincronizar con el backend: se tiene latitud y longitud confirmadas del mapa
     await _ingresoController.syncIncidenteDesdeGoogleMaps();
@@ -218,7 +254,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
 
     // 2. Marcadores de incidentes recientes (Azul / Celeste)
     final incidentes = _ingresoController.incidentesRecientes;
-    if (incidentes != null) {
+    if (incidentes.isNotEmpty) {
       for (var demanda in incidentes) {
       final inc = demanda.incidente;
       if (inc != null && inc.latitud != null && inc.longitud != null) {
@@ -442,7 +478,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
     }
 
     final incidentes = _ingresoController.incidentesRecientes;
-    if (incidentes != null) {
+    if (incidentes.isNotEmpty) {
       for (var demanda in incidentes) {
         final inc = demanda.incidente;
         if (inc != null && inc.latitud != null && inc.longitud != null) {
