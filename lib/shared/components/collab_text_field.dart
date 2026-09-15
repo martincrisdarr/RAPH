@@ -10,6 +10,7 @@ class CollabTextField extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSocketUpdate;
   final int? maxLines;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
@@ -26,6 +27,7 @@ class CollabTextField extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.onChanged,
+    this.onSocketUpdate,
     this.maxLines = 1,
     this.keyboardType,
     this.inputFormatters,
@@ -101,8 +103,11 @@ class _CollabTextFieldState extends State<CollabTextField> {
           );
         });
         
-        // Disparar callback local para mantener el estado sincronizado
-        if (widget.onChanged != null) {
+        // Disparar callback especifico de socket o local
+        if (widget.onSocketUpdate != null) {
+          widget.onSocketUpdate!(newValue);
+        } else if (widget.onChanged != null) {
+          // Fallback por si no implementaron onSocketUpdate
           widget.onChanged!(newValue);
         }
       }

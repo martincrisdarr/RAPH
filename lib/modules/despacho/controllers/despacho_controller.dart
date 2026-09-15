@@ -247,18 +247,27 @@ class DespachoController extends ChangeNotifier {
   bool _isIncidentesLoading = false;
   bool get isIncidentesLoading => _isIncidentesLoading;
 
+  bool isIncidenteRojo(Incidente inc) {
+    if (inc.idConfCodigo == 29 || inc.idConfCodigo == 135) return true;
+    final triage = (inc.codigoTriage ?? '').trim().toLowerCase();
+    if (triage == 'rojo' || triage == 'roja') return true;
+    final desc = (inc.descripcion ?? '').toLowerCase();
+    if (desc.contains('dolor tor') || desc.contains('trauma') || desc.contains('atrapado')) return true;
+    return false;
+  }
+
   int _getPrioridadPeso(DemandaRecibida d) {
     final inc = d.incidente;
     if (inc == null) return 4;
-    final code = inc.idConfCodigo;
-    final triage = inc.codigoTriage?.toLowerCase();
+    if (isIncidenteRojo(inc)) return 1;
 
-    if (code == 29 || triage == 'rojo') return 1;
-    if (code == 30 || triage == 'amarillo') return 2;
+    final code = inc.idConfCodigo;
+    final triage = (inc.codigoTriage ?? '').trim().toLowerCase();
+
+    if (code == 30 || triage == 'amarillo' || triage == 'amarilla') return 2;
     if (code == 31 || triage == 'verde') return 3;
 
     final desc = (inc.descripcion ?? '').toLowerCase();
-    if (desc.contains('dolor tor') || desc.contains('trauma') || desc.contains('atrapado')) return 1;
     if (desc.contains('colisión') || desc.contains('vial')) return 2;
 
     return 3;
@@ -692,6 +701,12 @@ class DespachoController extends ChangeNotifier {
     final incident = _incidentesActivos[incIndex].incidente;
     if (incident == null) return;
 
+    // Validación de protocolo estricta: sólo incidentes en Código Rojo permiten despacho sin víctimas
+    if (!isIncidenteRojo(incident)) {
+      print('[DespachoController] Despacho rechazado: el incidente ID $idIncidente no es Código Rojo y no tiene víctimas.');
+      return;
+    }
+
     final mIndex = _moviles.indexWhere((m) => m.id == idMovil);
     if (mIndex != -1) {
       double offsetLat = 0.002;
@@ -815,7 +830,7 @@ class DespachoController extends ChangeNotifier {
     final incidente = demanda.incidente;
     if (incidente == null) return;
 
-    // 2. Liberar todos los móviles que estuviesen asignados a las víctimas de este incidente
+    // 2. Liberar todos los móviles que estuviesen asignados a las víctimas o directamente al incidente
     if (incidente.victimas != null) {
       for (var vic in incidente.victimas!) {
         final assignedIds = vic.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? [];
@@ -830,6 +845,17 @@ class DespachoController extends ChangeNotifier {
             );
           }
         }
+      }
+    }
+
+    // Liberar cualquier móvil despachado directamente al incidente (ej. despacho rápido sin víctimas)
+    for (int i = 0; i < _moviles.length; i++) {
+      if (_moviles[i].idIncidenteActivo == incidente.idIncidente || _moviles[i].idIncidenteActivo == demanda.idDemandaRecibida) {
+        _moviles[i] = _moviles[i].copyWith(
+          estado: 'Disponible',
+          idmovilEstado: getIdEstadoPorNombre('Disponible'),
+          clearIncidente: true,
+        );
       }
     }
 

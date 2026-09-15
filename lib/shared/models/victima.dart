@@ -111,7 +111,7 @@ class Victima {
     if (idConfGenero != null) map['idconf_genero'] = idConfGenero;
     if (edad != null) map['edad'] = edad;
     if (estadoActual != null) map['estado_actual'] = estadoActual;
-    if (idConfCodigo != null) map['idconf_codigo'] = idConfCodigo;
+    map['idconf_codigo'] = idConfCodigo;
     if (idIncidente != null) map['idincidente'] = idIncidente;
     if (fechahoraSolicitaDespacho != null) map['fechahora_solicita_despacho'] = fechahoraSolicitaDespacho!.toIso8601String();
     if (fechahoraConfirmaDespacho != null) map['fechahora_confirma_despacho'] = fechahoraConfirmaDespacho!.toIso8601String();
@@ -130,6 +130,7 @@ class Victima {
     int? edad,
     String? estadoActual,
     int? idConfCodigo,
+    bool clearIdConfCodigo = false,
     int? idIncidente,
     DateTime? fechahoraSolicitaDespacho,
     DateTime? fechahoraConfirmaDespacho,
@@ -146,7 +147,7 @@ class Victima {
       idConfGenero: idConfGenero ?? this.idConfGenero,
       edad: edad ?? this.edad,
       estadoActual: estadoActual ?? this.estadoActual,
-      idConfCodigo: idConfCodigo ?? this.idConfCodigo,
+      idConfCodigo: clearIdConfCodigo ? null : (idConfCodigo ?? this.idConfCodigo),
       idIncidente: idIncidente ?? this.idIncidente,
       fechahoraSolicitaDespacho: fechahoraSolicitaDespacho ?? this.fechahoraSolicitaDespacho,
       fechahoraConfirmaDespacho: fechahoraConfirmaDespacho ?? this.fechahoraConfirmaDespacho,

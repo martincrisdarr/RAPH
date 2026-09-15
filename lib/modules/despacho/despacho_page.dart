@@ -7,6 +7,7 @@ import '../../shared/theme/app_theme_tokens.dart';
 import '../../shared/models/unidad.dart';
 import '../../shared/models/movil.dart';
 import '../../shared/models/demanda_recibida.dart';
+import '../../shared/models/incidente.dart';
 import '../../shared/models/victima.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'controllers/despacho_controller.dart';
@@ -95,6 +96,45 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
       case 'Inactivo':
       default:
         return Colors.white38;
+    }
+  }
+
+  bool _isIncidenteRojo(Incidente inc) {
+    if (inc.idConfCodigo == 29 || inc.idConfCodigo == 135) return true;
+    final triage = (inc.codigoTriage ?? '').trim().toLowerCase();
+    if (triage == 'rojo' || triage == 'roja') return true;
+    final descLower = (inc.descripcion ?? '').toLowerCase();
+    if (descLower.contains('dolor tor') || descLower.contains('trauma') || descLower.contains('atrapado')) {
+      return true;
+    }
+    return false;
+  }
+
+  String _getPrioridadLabel(Incidente inc) {
+    if (_isIncidenteRojo(inc)) return 'ROJA';
+    final code = inc.idConfCodigo;
+    final triage = (inc.codigoTriage ?? '').trim().toLowerCase();
+    final descLower = (inc.descripcion ?? '').toLowerCase();
+    if (code == 30 || triage == 'amarillo' || triage == 'amarilla' || descLower.contains('colisión') || descLower.contains('vial')) {
+      return 'AMARILLA';
+    }
+    if (code == 31 || triage == 'verde') {
+      return 'VERDE';
+    }
+    return 'SIN CLASIFICAR';
+  }
+
+  Color _getPrioridadColor(Incidente inc) {
+    final label = _getPrioridadLabel(inc);
+    switch (label) {
+      case 'ROJA':
+        return AppColors.accentRed;
+      case 'AMARILLA':
+        return Colors.orangeAccent;
+      case 'VERDE':
+        return AppColors.accentGreen;
+      default:
+        return Colors.white54;
     }
   }
   
@@ -406,26 +446,10 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                       if (inc == null) return const SizedBox.shrink();
                       
                       // Determinar color de prioridad y etiqueta según idconf_codigo / codigoTriage
-                      Color priorityColor = AppColors.accentGreen;
-                      String priorityLabel = 'BAJA';
-                      
-                      final code = inc.idConfCodigo;
-                      final triage = inc.codigoTriage?.toLowerCase();
-                      final descLower = (inc.descripcion ?? '').toLowerCase();
-
-                      if (code == 29 || triage == 'rojo' || descLower.contains('dolor tor') || descLower.contains('trauma') || descLower.contains('atrapado')) {
-                        priorityColor = AppColors.accentRed;
-                        priorityLabel = 'ROJA';
-                      } else if (code == 30 || triage == 'amarillo' || descLower.contains('colisión') || descLower.contains('vial')) {
-                        priorityColor = Colors.orangeAccent;
-                        priorityLabel = 'AMARILLA';
-                      } else if (code == 31 || triage == 'verde') {
-                        priorityColor = AppColors.accentGreen;
-                        priorityLabel = 'VERDE';
-                      }
-
+                      final priorityColor = _getPrioridadColor(inc);
+                      final priorityLabel = _getPrioridadLabel(inc);
+                      final isRojo = _isIncidenteRojo(inc);
                       final isSelected = _selectedIncident?.idDemandaRecibida == demanda.idDemandaRecibida;
-                      final isRojo = priorityLabel == 'ROJA';
                       
                       // Verificar si tiene móvil despachado
                       final despachados = _controller.moviles.where((m) => m.idIncidenteActivo == (demanda.incidente?.idIncidente ?? demanda.idDemandaRecibida));
@@ -728,7 +752,28 @@ Widget _buildMapContainer(ThemeData theme) {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('CONTROL DE DESPACHO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accentBlue)),
+                Row(
+                  children: [
+                    const Text('CONTROL DE DESPACHO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.accentBlue)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getPrioridadColor(inc).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(AppRadii.xs),
+                        border: Border.all(color: _getPrioridadColor(inc).withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        _getPrioridadLabel(inc),
+                        style: TextStyle(
+                          color: _getPrioridadColor(inc),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18, color: Colors.white60),
                   onPressed: () {
@@ -752,83 +797,333 @@ Widget _buildMapContainer(ThemeData theme) {
             const SizedBox(height: 12),
             
             if (victimas.isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.02),
-                  borderRadius: BorderRadius.circular(AppRadii.md),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.white38),
-                        SizedBox(width: 8),
-                        Text(
-                          'No hay víctimas registradas aún.',
-                          style: TextStyle(color: Colors.white38, fontSize: 13, fontStyle: FontStyle.italic),
+              if (_isIncidenteRojo(inc)) ...[
+                // CÓDIGO ROJO SIN VÍCTIMAS: Despacho rápido habilitado
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppColors.accentRed.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    border: Border.all(color: AppColors.accentRed.withOpacity(0.35)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentRed.withOpacity(0.2),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
-                    if (inc.idConfCodigo == 29 || inc.codigoTriage == 'Rojo') ...[
-                      const SizedBox(height: 12),
-                      const Divider(color: Colors.white10),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'DESPACHO RÁPIDO (CÓDIGO ROJO - SIN VÍCTIMA):',
-                        style: TextStyle(color: AppColors.accentRed, fontSize: 11, fontWeight: FontWeight.bold),
+                        child: const Icon(Icons.flash_on_rounded, size: 18, color: AppColors.accentRed),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DESPACHO RÁPIDO HABILITADO (CÓDIGO ROJO)',
+                              style: TextStyle(
+                                color: AppColors.accentRed,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            SizedBox(height: 3),
+                            Text(
+                              'Emergencia con riesgo vital inminente. El protocolo SIEN autoriza el despacho inmediato de ambulancias a la ubicación sin requerir la carga previa de víctimas.',
+                              style: TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.25),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Móviles actualmente en camino/despachados a este incidente sin víctima
+                Builder(builder: (context) {
+                  final asignadosAlIncidente = _controller.moviles.where((m) => m.idIncidenteActivo == idIncidenteActual).toList();
+                  if (asignadosAlIncidente.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle_outline, size: 14, color: AppColors.accentGreen),
+                          const SizedBox(width: 6),
+                          Text(
+                            'MÓVILES EN SERVICIO EN ESTE INCIDENTE (${asignadosAlIncidente.length}):',
+                            style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
-                      Builder(builder: (context) {
-                        final despachables = _controller.moviles.where((m) => m.idmovilEstado == 1 || m.estado.trim().toLowerCase() == 'disponible').toList();
-                        if (despachables.isEmpty) {
-                          return const Text('No hay móviles disponibles', style: TextStyle(color: Colors.white38, fontSize: 11, fontStyle: FontStyle.italic));
-                        }
-                        return Column(
-                          children: despachables.map((m) {
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentRed.withOpacity(0.06),
-                                borderRadius: BorderRadius.circular(AppRadii.xs),
-                                border: Border.all(color: AppColors.accentRed.withOpacity(0.3)),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      ...asignadosAlIncidente.map((m) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentBlue.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(AppRadii.sm),
+                            border: Border.all(color: AppColors.accentBlue.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
                                 children: [
-                                  Row(
+                                  const Icon(Icons.airport_shuttle, size: 16, color: AppColors.accentBlue),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.airport_shuttle, size: 16, color: AppColors.accentRed),
-                                      const SizedBox(width: 8),
                                       Text(m.nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                      Text('Estado: ${m.estado}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
                                     ],
-                                  ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.accentRed,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      minimumSize: const Size(60, 26),
-                                    ),
-                                    onPressed: () {
-                                      _controller.despacharMovilAIncidenteSinVictima(idIncidenteActual, m.id);
-                                    },
-                                    child: const Text('DESPACHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
                                   ),
                                 ],
                               ),
-                            );
-                          }).toList(),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white60,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: const Size(0, 26),
+                                ),
+                                icon: const Icon(Icons.close, size: 14),
+                                label: const Text('Liberar móvil', style: TextStyle(fontSize: 11)),
+                                onPressed: () {
+                                  _controller.liberarMovilDeIncidente(m.id);
+                                },
+                              ),
+                            ],
+                          ),
                         );
                       }),
+                      const SizedBox(height: 10),
                     ],
+                  );
+                }),
+
+                // Listado de móviles disponibles para despacho
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'MÓVILES DISPONIBLES PARA DESPACHO INMEDIATO:',
+                      style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    InkWell(
+                      onTap: () => _controller.cargarMoviles(),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(Icons.refresh_rounded, size: 12, color: AppColors.accentBlue),
+                            SizedBox(width: 4),
+                            Text('Actualizar', style: TextStyle(color: AppColors.accentBlue, fontSize: 10.5)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 8),
+                Builder(builder: (context) {
+                  if (despachables.isEmpty) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.02),
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'No hay móviles disponibles en base para despachar.',
+                          style: TextStyle(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: despachables.map((m) {
+                      final uList = _controller.unidades.where((u) => u.id == m.idUnidadAsignada).toList();
+                      final u = uList.isNotEmpty ? uList.first : null;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentRed.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(AppRadii.xs),
+                          border: Border.all(color: AppColors.accentRed.withOpacity(0.25)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.airport_shuttle, size: 18, color: AppColors.accentRed),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(m.nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                                        if (u != null || (m.descripcion != null && m.descripcion!.isNotEmpty))
+                                          Text(
+                                            '${m.descripcion != null && m.descripcion!.isNotEmpty ? "${m.descripcion} • " : ""}${u != null ? "${u.marca} (${u.patente})" : ""}',
+                                            style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accentRed,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                minimumSize: const Size(70, 28),
+                              ),
+                              onPressed: () {
+                                _controller.despacharMovilAIncidenteSinVictima(idIncidenteActual, m.id);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Móvil ${m.nombre} despachado en Código Rojo al incidente'),
+                                    backgroundColor: AppColors.accentRed,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              child: const Text('DESPACHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }),
+              ] else ...[
+                // NO ES CÓDIGO ROJO Y NO HAY VÍCTIMAS: Despacho bloqueado
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(AppRadii.md),
+                    border: Border.all(color: Colors.amber.withOpacity(0.35)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.shield_outlined, size: 18, color: Colors.amber.shade300),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'DESPACHO BLOQUEADO (SIN VÍCTIMAS)',
+                              style: TextStyle(
+                                color: Colors.amber.shade200,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Prioridad actual: ${_getPrioridadLabel(inc)} (${inc.codigoTriage ?? "No Rojo"}).',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'De acuerdo con el protocolo operativo del SIEN, únicamente los incidentes en CÓDIGO ROJO (emergencia vital) admiten el despacho de ambulancias sin víctimas cargadas.',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Para habilitar el despacho de móviles, debe registrar al menos una víctima en este incidente o actualizar la clasificación a Código Rojo si la situación así lo requiere.',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11.5,
+                          fontStyle: FontStyle.italic,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Si existiesen móviles asignados previamente, permitir monitorearlos y liberarlos
+                Builder(builder: (context) {
+                  final asignadosAlIncidente = _controller.moviles.where((m) => m.idIncidenteActivo == idIncidenteActual).toList();
+                  if (asignadosAlIncidente.isEmpty) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Móviles previamente asignados a este incidente:',
+                          style: TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 6),
+                        ...asignadosAlIncidente.map((m) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(AppRadii.xs),
+                              border: Border.all(color: Colors.white12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(m.nombre, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                TextButton(
+                                  onPressed: () => _controller.liberarMovilDeIncidente(m.id),
+                                  child: const Text('Liberar móvil', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                }),
+              ],
             ]
             else
               ...victimas.map((v) {

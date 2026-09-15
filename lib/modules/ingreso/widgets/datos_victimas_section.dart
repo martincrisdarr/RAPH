@@ -467,6 +467,7 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                         Expanded(
                           flex: 1,
                           child: CustomSelect<Configuracion>(
+                            key: ValueKey('victima_${victima.id}_genero'),
                             enabled: !isLocked,
                             label: 'Género',
                             fetchItems: () => ConfiguracionService.obtenerGeneros(),
@@ -614,19 +615,37 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
   }
 
   Widget _buildTriageBanner(ThemeData theme, int index, VictimaData victima) {
+    final triageVictima = victima.codigoTriage?.trim();
+    final triageIncidente = _ingresoController.incidenteActual.codigoTriage?.trim();
+    final idConfCodigoIncidente = _ingresoController.incidenteActual.idConfCodigo;
+    final tieneProtocolos = _ingresoController.protocolosSeleccionados.isNotEmpty;
+
+    String? effectiveTriage = (triageVictima != null && triageVictima.isNotEmpty) ? triageVictima : null;
+    if (effectiveTriage == null) {
+      if (tieneProtocolos || idConfCodigoIncidente == 29 || idConfCodigoIncidente == 135 || triageIncidente?.toLowerCase() == 'rojo') {
+        effectiveTriage = 'Rojo';
+      } else if (idConfCodigoIncidente == 30 || triageIncidente?.toLowerCase() == 'amarillo') {
+        effectiveTriage = 'Amarillo';
+      } else if (idConfCodigoIncidente == 31 || triageIncidente?.toLowerCase() == 'verde') {
+        effectiveTriage = 'Verde';
+      } else if (idConfCodigoIncidente == 63 || (triageIncidente != null && triageIncidente.toLowerCase().contains('sin'))) {
+        effectiveTriage = 'Sin código';
+      }
+    }
+
     Color codeColor;
     String codeText;
 
-    switch (victima.codigoTriage) {
-      case 'Rojo':
+    switch (effectiveTriage?.toLowerCase()) {
+      case 'rojo':
         codeColor = Colors.red.shade600;
         codeText = 'ROJO - EMERGENCIA CRÍTICA';
         break;
-      case 'Amarillo':
+      case 'amarillo':
         codeColor = Colors.yellow.shade700;
         codeText = 'AMARILLO - URGENCIA';
         break;
-      case 'Verde':
+      case 'verde':
         codeColor = Colors.green.shade600;
         codeText = 'VERDE - NO URGENTE';
         break;

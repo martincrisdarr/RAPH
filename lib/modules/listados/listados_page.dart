@@ -78,10 +78,10 @@ class _ListadosPageState extends State<ListadosPage> {
 
           if (idIncidente.isEmpty) continue;
 
-          final int? idConfCode = int.tryParse((incident['idconf_codigo'] ?? map['idconf_codigo'] ?? '').toString());
+          final int? idConfCode = int.tryParse((incident['idconf_codigo'] ?? map['idconf_codigo'] ?? incident['idconf_estado'] ?? map['idconf_estado'] ?? '').toString());
           String? priority = map['prioridad'] ?? incident['codigo_triage'] ?? incident['codigoTriage'];
 
-          if (idConfCode == 29) {
+          if (idConfCode == 29 || idConfCode == 135) {
             priority = 'ROJA';
           } else if (idConfCode == 30) {
             priority = 'AMARILLA';

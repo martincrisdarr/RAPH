@@ -25,15 +25,23 @@ class DemandaRecibidaService {
         demanda = demanda.copyWith(usuario: 'mdarroux');
       }
 
+      final body = jsonEncode(demanda.toJson());
+      print('[DemandaRecibidaService] POST -> $body');
+
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: _getHeaders(),
-        body: jsonEncode(demanda.toJson()),
+        body: body,
       );
 
+      print('[DemandaRecibidaService] POST response ${response.statusCode}: ${response.body}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return DemandaRecibida.fromJson(data);
+        final raw = jsonDecode(response.body);
+        final data = raw is Map && raw.containsKey('data') ? raw['data'] : raw;
+        final creada = DemandaRecibida.fromJson(data);
+        print('[DemandaRecibidaService] idDemandaRecibida recibido: ${creada.idDemandaRecibida}');
+        return creada;
       } else {
         print('Error al crear demanda: ${response.statusCode} - ${response.body}');
         return null;

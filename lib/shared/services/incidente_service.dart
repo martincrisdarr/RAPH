@@ -50,11 +50,14 @@ class IncidenteService {
     if (incidente.idIncidente == null) return false;
     
     try {
+      final body = jsonEncode(incidente.toJson());
+      print('[IncidenteService] PUT ${incidente.idIncidente} -> $body');
       final response = await http.put(
         Uri.parse('$_baseUrl/${incidente.idIncidente}'),
         headers: _getHeaders(),
-        body: jsonEncode(incidente.toJson()),
+        body: body,
       );
+      print('[IncidenteService] PUT response ${response.statusCode}: ${response.body}');
 
       return response.statusCode == 200 || response.statusCode == 204;
     } catch (e) {

@@ -23,12 +23,12 @@ class _IncidenteSectionState extends State<IncidenteSection> {
   String _textBeforeListening = '';
 
   final List<Map<String, dynamic>> _protocolosPredeterminados = [
-    {'nombre': 'Accidente Vehicular', 'color': Colors.red.shade400},
-    {'nombre': 'Derrumbe', 'color': Colors.red.shade400},
-    {'nombre': 'Catástrofe', 'color': Colors.red.shade400},
-    {'nombre': 'Gases Tóxicos', 'color': Colors.red.shade400},
-    {'nombre': 'Incendio', 'color': Colors.red.shade400},
-    {'nombre': 'Accidente Industrial', 'color': Colors.red.shade400},
+    {'id': '-1', 'nombre': 'Accidente Vehicular', 'color': Colors.red.shade400},
+    {'id': '-2', 'nombre': 'Derrumbe', 'color': Colors.red.shade400},
+    {'id': '-3', 'nombre': 'Catástrofe', 'color': Colors.red.shade400},
+    {'id': '-4', 'nombre': 'Gases Tóxicos', 'color': Colors.red.shade400},
+    {'id': '-5', 'nombre': 'Incendio', 'color': Colors.red.shade400},
+    {'id': '-6', 'nombre': 'Accidente Industrial', 'color': Colors.red.shade400},
   ];
 
   List<Map<String, dynamic>> _protocolosDinamicos = [];
@@ -47,7 +47,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
       final lista = <Map<String, dynamic>>[];
       for (var p in configTipos) {
         if (p.descripcion.isNotEmpty) {
-          lista.add({'nombre': p.descripcion, 'color': Colors.red.shade400});
+          lista.add({'id': p.idconfiguracion.toString(), 'nombre': p.descripcion, 'color': Colors.red.shade400});
         }
       }
 
@@ -184,7 +184,8 @@ class _IncidenteSectionState extends State<IncidenteSection> {
               children: protocolosList.map((protoData) {
                 final protocolo = protoData['nombre'] as String;
                 final color = protoData['color'] as Color;
-                final isSelected = _ingresoController.protocolosSeleccionados.contains(protocolo);
+                final protocoloId = protoData['id'] as String;
+                final isSelected = _ingresoController.protocolosSeleccionados.contains(protocoloId);
                 
                 return ActionChip(
                   label: Text(
@@ -204,18 +205,33 @@ class _IncidenteSectionState extends State<IncidenteSection> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   onPressed: () {
                     final current = List<String>.from(_ingresoController.protocolosSeleccionados);
-                    if (current.contains(protocolo)) {
-                      current.remove(protocolo);
+                    if (current.contains(protocoloId)) {
+                      current.clear(); // Si la toca y ya estaba seleccionada, la desmarca
                     } else {
-                      current.add(protocolo);
+                      current.clear(); // Primero limpiamos todo
+                      current.add(protocoloId); // Y agregamos solo la nueva
                     }
+                    
+                    // Limpiamos cualquier etiqueta fantasma que no exista en la vista actual
+                    final validProtocolos = _protocolosDinamicos.map((e) => e['id'] as String).toList();
+                    current.removeWhere((p) => !validProtocolos.contains(p));
+
                     _ingresoController.protocolosSeleccionados = current;
 
                     if (current.isNotEmpty) {
-                      _ingresoController.updateIncidente(codigoTriage: 'Rojo');
+                      _ingresoController.updateIncidente(
+                        codigoTriage: 'Rojo',
+                        idConfCodigo: 29,
+                        syncInmediato: true,
+                      );
                       _ingresoController.updateTodasLasVictimas(codigoTriage: 'Rojo');
                     } else {
-                      _ingresoController.updateIncidente(codigoTriage: '');
+                      _ingresoController.updateIncidente(
+                        codigoTriage: 'Sin código',
+                        idConfCodigo: ConfiguracionService.idSinCodigoConst,
+                        clearCodigo: true,
+                        syncInmediato: true,
+                      );
                       _ingresoController.updateTodasLasVictimas(codigoTriage: '');
                     }
                     setState(() {});
@@ -237,6 +253,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
               isCollaborative: _ingresoController.incidenteActual.idIncidente != null,
               maxLines: 12,
               onChanged: (val) => _ingresoController.updateIncidente(descripcion: val),
+              onSocketUpdate: (val) => _ingresoController.updateIncidente(descripcion: val, fromSocket: true),
               suffixIcon: Padding(
                 padding: const EdgeInsets.only(top: 8.0, right: 8.0),
                 child: Align(
@@ -269,7 +286,7 @@ class _IncidenteSectionState extends State<IncidenteSection> {
 
   Widget _buildTriageBanner(ThemeData theme) {
     final triage = _ingresoController.incidenteActual.codigoTriage;
-    if (triage == null || triage.trim().isEmpty) {
+    if (triage == null || triage.trim().isEmpty || triage.toLowerCase().contains('sin')) {
       return const SizedBox.shrink();
     }
 
