@@ -857,9 +857,11 @@ Widget _buildMapContainer(ThemeData theme) {
                         children: [
                           const Icon(Icons.check_circle_outline, size: 14, color: AppColors.accentGreen),
                           const SizedBox(width: 6),
-                          Text(
-                            'MÓVILES EN SERVICIO EN ESTE INCIDENTE (${asignadosAlIncidente.length}):',
-                            style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                          Expanded(
+                            child: Text(
+                              'MÓVILES EN SERVICIO EN ESTE INCIDENTE (${asignadosAlIncidente.length}):',
+                              style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ],
                       ),
@@ -876,19 +878,32 @@ Widget _buildMapContainer(ThemeData theme) {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.airport_shuttle, size: 16, color: AppColors.accentBlue),
-                                  const SizedBox(width: 8),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(m.nombre, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                                      Text('Estado: ${m.estado}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                                    ],
-                                  ),
-                                ],
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.airport_shuttle, size: 16, color: AppColors.accentBlue),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            m.nombre,
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            'Estado: ${m.estado}',
+                                            style: const TextStyle(color: Colors.white60, fontSize: 11),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               TextButton.icon(
                                 style: TextButton.styleFrom(
                                   foregroundColor: Colors.white60,
@@ -914,15 +929,19 @@ Widget _buildMapContainer(ThemeData theme) {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'MÓVILES DISPONIBLES PARA DESPACHO INMEDIATO:',
-                      style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                    const Expanded(
+                      child: Text(
+                        'MÓVILES DISPONIBLES PARA DESPACHO:',
+                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     InkWell(
                       onTap: () => _controller.cargarMoviles(),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.refresh_rounded, size: 12, color: AppColors.accentBlue),
                             SizedBox(width: 4),
@@ -1345,15 +1364,19 @@ Widget _buildMapContainer(ThemeData theme) {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Despachar móvil:',
-                                style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                              const Expanded(
+                                child: Text(
+                                  'Despachar móvil:',
+                                  style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               InkWell(
                                 onTap: () => _controller.cargarMoviles(),
                                 child: const Padding(
                                   padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                   child: Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(Icons.refresh_rounded, size: 12, color: AppColors.accentBlue),
                                       SizedBox(width: 4),

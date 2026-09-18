@@ -132,7 +132,10 @@ class AppSidebar extends StatelessWidget {
                                     message: 'Continuar Incidente',
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(10),
-                                      onTap: () => onItemSelected(0),
+                                      onTap: () {
+                                        IngresoController().vistaFormulario = true;
+                                        onItemSelected(0);
+                                      },
                                       hoverColor: Colors.amber.withOpacity(0.05),
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 200),
