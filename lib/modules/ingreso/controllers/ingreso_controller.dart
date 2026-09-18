@@ -291,6 +291,7 @@ class IngresoController extends ChangeNotifier {
     _selectedVictimaIndex = 0;
     _llamadasDelIncidente = [];
     _tieneBorrador = false;
+    _vistaFormulario = true;
     _sincronizarSocketRoom();
     notifyListeners();
   }
@@ -308,6 +309,7 @@ class IngresoController extends ChangeNotifier {
       fechaHora: DateTime.now(),
     );
 
+    _vistaFormulario = true;
     _sincronizarSocketRoom();
     await _guardarBorrador();
     notifyListeners();
@@ -337,6 +339,7 @@ class IngresoController extends ChangeNotifier {
     _victimas = [VictimaData()];
     _selectedVictimaIndex = 0;
     _llamadasDelIncidente = [];
+    _vistaFormulario = true;
 
     _sincronizarSocketRoom();
     await _guardarBorrador();
@@ -848,6 +851,7 @@ class IngresoController extends ChangeNotifier {
   }
 
   void cargarIncidenteYListarLlamadas(DemandaRecibida demandaConIncidente, List<DemandaRecibida> llamadas) {
+    _vistaFormulario = true;
     // Vincular la llamada actual al incidente seleccionado sin sobrescribir los datos de ingreso
     _demandaActual = _demandaActual.copyWith(
       idIncidente: demandaConIncidente.incidente?.idIncidente ?? demandaConIncidente.idIncidente,

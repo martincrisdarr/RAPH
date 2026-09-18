@@ -23,6 +23,7 @@ class _MainLayoutState extends State<MainLayout> {
         if (isNew) {
           await IngresoController().limpiarBorrador();
         }
+        IngresoController().vistaFormulario = true;
         _onMenuSelected(0);
       },
     ),
@@ -31,6 +32,9 @@ class _MainLayoutState extends State<MainLayout> {
   ];
 
   void _onMenuSelected(int index) {
+    if (index == 0) {
+      IngresoController().vistaFormulario = true;
+    }
     setState(() {
       _selectedIndex = index;
     });

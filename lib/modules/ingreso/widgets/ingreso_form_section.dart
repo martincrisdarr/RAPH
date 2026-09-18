@@ -31,6 +31,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
   @override
   void initState() {
     super.initState();
+    _ingresoController.vistaFormulario = true;
     _ingresoController.addListener(_onControllerUpdate);
     // Sincronizar estado inicial
     _onControllerUpdate();
@@ -579,6 +580,7 @@ class _IngresoFormSectionState extends State<IngresoFormSection> {
           } else {
             _ingresoController.cargarIncidenteYListarLlamadas(demanda, []);
           }
+          _ingresoController.vistaFormulario = true;
         },
         hoverColor: Colors.white.withValues(alpha: 0.04),
         child: Padding(

@@ -35,6 +35,7 @@ class _IngresoPageState extends State<IngresoPage> {
   @override
   void initState() {
     super.initState();
+    IngresoController().vistaFormulario = true;
     _cargarTiposIngreso();
   }
 
