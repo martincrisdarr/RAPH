@@ -66,7 +66,7 @@ class Victima {
         return false;
       }).toList();
 
-      final despachoActivo = activos.isNotEmpty ? activos.last : (despachosList.isNotEmpty ? despachosList.last : null);
+      final despachoActivo = activos.isNotEmpty ? activos.last : null;
       if (despachoActivo is Map) {
         if (idDespacho == null && despachoActivo['iddespacho'] != null) {
           idDespacho = int.tryParse(despachoActivo['iddespacho'].toString());
