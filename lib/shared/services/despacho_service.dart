@@ -78,17 +78,24 @@ class DespachoService {
     }
   }
 
-  /// Obtener despachos por idincidente
+  /// Obtener despachos activos por idincidente (activo == 1 y fechahoracierre null)
   static Future<List<Map<String, dynamic>>> obtenerPorIncidente(int idIncidente) async {
     try {
       final response = await http.get(
-        Uri.parse('$_endpoint?filter%5Bidincidente%5D=$idIncidente'),
+        Uri.parse('$_endpoint?idincidente=$idIncidente&activo=1&expand=movilunidad.movil,movil'),
         headers: _getHeaders(),
       );
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         if (decoded is List) {
-          return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+          return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).where((d) {
+            final act = d['activo'];
+            final isActivo = act == 1 || act == '1' || act == true;
+            final noCerrado = d['fechahoracierre'] == null || d['fechahoracierre'].toString().trim().isEmpty;
+            final incId = d['idincidente'] != null ? int.tryParse(d['idincidente'].toString()) : null;
+            final matchesInc = incId == null || incId == idIncidente;
+            return isActivo && noCerrado && matchesInc;
+          }).toList();
         }
       }
       return [];
@@ -98,7 +105,7 @@ class DespachoService {
     }
   }
 
-  /// Cancelar / Eliminar un despacho por iddespacho (DELETE)
+  /// Cancelar un despacho por iddespacho (establece activo = 2 en backend)
   static Future<bool> cancelarDespacho(int idDespacho) async {
     try {
       final response = await http.delete(
@@ -107,14 +114,24 @@ class DespachoService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 204) {
-        print('[DespachoService] Despacho $idDespacho eliminado correctamente.');
+        print('[DespachoService] Despacho $idDespacho cancelado (activo=2) exitosamente.');
         return true;
       } else {
-        print('[DespachoService] Error al eliminar despacho $idDespacho: status ${response.statusCode} - ${response.body}');
-        return false;
+        print('[DespachoService] DELETE status ${response.statusCode}, fallback con PUT activo=2...');
+        final now = DateTime.now();
+        final fechaCierre = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+        final putResp = await http.put(
+          Uri.parse('$_endpoint/$idDespacho'),
+          headers: _getHeaders(),
+          body: json.encode({
+            'activo': 2,
+            'fechahoracierre': fechaCierre,
+          }),
+        );
+        return putResp.statusCode == 200;
       }
     } catch (e) {
-      print('[DespachoService] Excepción al eliminar despacho: $e');
+      print('[DespachoService] Excepción al cancelar despacho: $e');
       return false;
     }
   }
