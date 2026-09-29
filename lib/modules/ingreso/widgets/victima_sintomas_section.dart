@@ -112,8 +112,9 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
       widget.victima.idSintomaSeleccionadoId = sintoma.id;
     });
 
-    // 1. Actualizar lista de nombres de síntomas seleccionados en VictimaData para triage/resumen (solo 1 síntoma)
-    _ingresoController.updateVictima(widget.index, sintomas: [sintoma.nombre]);
+    // 1. Actualizar lista de nombres de síntomas seleccionados en VictimaData para triage/resumen
+    final nombreCompleto = '${sintoma.codigo} - ${sintoma.nombre}';
+    _ingresoController.updateVictima(widget.index, sintomas: [nombreCompleto]);
 
     // 2. Persistir o recuperar la evaluación activa si ya hay un idVictima asignado
     const userHandle = 'mdarroux';
@@ -155,6 +156,47 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
     }
   }
 
+  void _handleTriageSelected(String color, {bool mostrarNotificacion = true}) {
+    setState(() {
+      widget.victima.codigoTriage = color;
+    });
+    _ingresoController.updateVictima(widget.index, codigoTriage: color);
+
+    final incTriage = _ingresoController.incidenteActual.codigoTriage?.toLowerCase();
+    if (color.toLowerCase() == 'rojo') {
+      _ingresoController.updateIncidente(codigoTriage: 'Rojo', idConfCodigo: 29);
+    } else if (color.toLowerCase() == 'amarillo' && incTriage != 'rojo') {
+      _ingresoController.updateIncidente(codigoTriage: 'Amarillo', idConfCodigo: 30);
+    } else if (color.toLowerCase() == 'verde' && incTriage != 'rojo' && incTriage != 'amarillo') {
+      _ingresoController.updateIncidente(codigoTriage: 'Verde', idConfCodigo: 31);
+    }
+
+    if (mostrarNotificacion && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                color.toLowerCase() == 'rojo'
+                    ? Icons.emergency
+                    : (color.toLowerCase() == 'amarillo' ? Icons.warning_amber_rounded : Icons.check_circle_rounded),
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Text('Triage asignado a Víctima #${widget.index + 1}: $color'),
+            ],
+          ),
+          backgroundColor: color.toLowerCase() == 'rojo'
+              ? Colors.red.shade700
+              : (color.toLowerCase() == 'amarillo' ? Colors.amber.shade900 : Colors.green.shade700),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _handleRespuestaChanged(SintomaPregunta pregunta, dynamic valor) async {
     setState(() {
       _respuestas[pregunta.id] = valor;
@@ -192,7 +234,7 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Columna Izquierda: Buscador + Chips de Síntomas (50%)
+              // Columna Izquierda: Buscador + Fichas de Despacho (50%)
               Expanded(
                 flex: 1,
                 child: SintomaSearchPanel(
@@ -213,6 +255,8 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
                   errorMessage: _errorMessage,
                   respuestas: _respuestas,
                   onRespuestaChanged: _handleRespuestaChanged,
+                  onTriageSelected: (c) => _handleTriageSelected(c),
+                  triageActual: widget.victima.codigoTriage,
                 ),
               ),
             ],
@@ -236,6 +280,8 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
                 errorMessage: _errorMessage,
                 respuestas: _respuestas,
                 onRespuestaChanged: _handleRespuestaChanged,
+                onTriageSelected: (c) => _handleTriageSelected(c),
+                triageActual: widget.victima.codigoTriage,
               ),
             ],
           );

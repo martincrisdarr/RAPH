@@ -20,9 +20,9 @@ class DemandaRecibidaService {
 
   static Future<DemandaRecibida?> crear(DemandaRecibida demanda) async {
     try {
-      // Inyectar el legajo/usuario en la demanda si no tiene
+      // Inyectar el legajo/usuario del usuario logueado en la demanda si no tiene
       if (demanda.usuario == null || demanda.usuario!.contains(' ')) {
-        demanda = demanda.copyWith(usuario: 'mdarroux');
+        demanda = demanda.copyWith(usuario: RaphAuthController.instance.currentUsername);
       }
 
       final body = jsonEncode(demanda.toJson());

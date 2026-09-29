@@ -22,9 +22,8 @@ class JornadaService {
   static Future<Jornada?> iniciarJornada({
     required String user,
     required int idmovil,
-    int? kmInicio,
     String? rol,
-    String? observaciones,
+    bool forzar = false,
   }) async {
     try {
       final response = await http.post(
@@ -33,9 +32,8 @@ class JornadaService {
         body: json.encode({
           'user': user,
           'idmovil': idmovil,
-          if (kmInicio != null) 'km_inicio': kmInicio,
           if (rol != null) 'rol': rol,
-          if (observaciones != null) 'observaciones': observaciones,
+          if (forzar) 'forzar': true,
         }),
       );
 
@@ -58,8 +56,6 @@ class JornadaService {
   static Future<Jornada?> finalizarJornada({
     int? idjornada,
     String? user,
-    int? kmFin,
-    String? observaciones,
   }) async {
     try {
       final response = await http.post(
@@ -68,8 +64,6 @@ class JornadaService {
         body: json.encode({
           if (idjornada != null) 'idjornada': idjornada,
           if (user != null) 'user': user,
-          if (kmFin != null) 'km_fin': kmFin,
-          if (observaciones != null) 'observaciones': observaciones,
         }),
       );
 

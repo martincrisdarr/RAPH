@@ -136,12 +136,7 @@ class _IngresoPageState extends State<IngresoPage> {
                               child: IngresoSectionCard(
                                 title: 'NOVEDADES',
                                 child: NovedadesSection(
-                                  usuarioActual: () {
-                                    final u = RaphAuthController.instance.currentUser;
-                                    if (u == null) return 'Sistema';
-                                    final nombre = '${u.nombre ?? ''} ${u.apellido ?? ''}'.trim();
-                                    return nombre.isNotEmpty ? nombre : (u.email ?? 'Sistema');
-                                  }(),
+                                  usuarioActual: RaphAuthController.instance.currentUsername,
                                 ),
                               ),
                             ),

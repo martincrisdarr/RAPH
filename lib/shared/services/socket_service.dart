@@ -10,6 +10,11 @@ class SocketService {
   SocketService._internal();
 
   io.Socket? _socket;
+  bool _isConnecting = false;
+  String? _currentToken;
+
+  String? _currentEntidad;
+  int? _currentRecordId;
 
   // Estado reactivo: Mapa de los campos que están bloqueados actualmente
   // Ejemplo: {"telefono": {"id": "ivanb", "nombre": "Ivan Benzaquen"}}
@@ -19,7 +24,24 @@ class SocketService {
   final ValueNotifier<bool> isConnected = ValueNotifier(false);
 
   void connect(String token) {
-    if (_socket != null && _socket!.connected) return;
+    // Si ya estamos conectados o en proceso de conexión con el mismo token, no duplicar conexión
+    if (_socket != null && _currentToken == token) {
+      if (_socket!.connected || _isConnecting) {
+        debugPrint('[SocketService] Ya conectado o en proceso de conexion con el mismo token.');
+        return;
+      }
+    }
+
+    if (_socket != null) {
+      try {
+        _socket!.disconnect();
+        _socket!.dispose();
+      } catch (_) {}
+      _socket = null;
+    }
+
+    _currentToken = token;
+    _isConnecting = true;
 
     final uri = Uri.parse(ApiConfig.socketUrl);
     final baseUrl = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}';
@@ -32,25 +54,41 @@ class SocketService {
       .setTransports(['polling', 'websocket']) // Permite iniciar por HTTP polling y luego escalar a WebSocket
       .setAuth({'token': token}) // Envío seguro del token (v3/v4)
       .setQuery({'token': token}) // Compatibilidad con handshakes basados en query
-      .enableForceNew()
       .build());
 
     _socket!.onConnect((_) {
-      debugPrint('Conectado al servidor Socket.IO');
+      debugPrint('[SocketService] Conectado al servidor Socket.IO (socket id: ${_socket?.id})');
+      _isConnecting = false;
       isConnected.value = true;
+
+      // Auto re-join a la sala de registro si estaba seteada previamente
+      if (_currentEntidad != null && _currentRecordId != null) {
+        debugPrint('[SocketService] Auto re-joining record on connect: $_currentEntidad $_currentRecordId');
+        _socket?.emit(SocketEvents.clientJoin, {
+          'entidad': _currentEntidad,
+          'id': _currentRecordId,
+        });
+      }
     });
 
-    _socket!.onDisconnect((_) {
-      debugPrint('Desconectado del servidor Socket.IO');
+    _socket!.onDisconnect((reason) {
+      debugPrint('[SocketService] Desconectado del servidor Socket.IO: $reason');
+      _isConnecting = false;
       isConnected.value = false;
     });
 
+    _socket!.onConnectError((err) {
+      debugPrint('[SocketService] Error de conexion Socket.IO: $err');
+      _isConnecting = false;
+    });
+
     _socket!.on(SocketEvents.serverError, (err) {
-      debugPrint('Error de Socket.IO: $err');
+      debugPrint('[SocketService] Error de Socket.IO: $err');
     });
 
     // Escuchar el estado completo (Late Joiner)
     _socket!.on(SocketEvents.serverSyncState, (data) {
+      debugPrint('[SocketService] Recibido record:sync: $data');
       if (data is Map) {
         lockedFields.value = Map<String, dynamic>.from(data);
       }
@@ -84,18 +122,31 @@ class SocketService {
     });
 
     // Escuchar actualizaciones de campos en tiempo real
-    _socket!.on(SocketEvents.serverFieldUpdated, (data) {
+    void handleIncomingField(dynamic data) {
+      debugPrint('[SocketService] Recibido fieldUpdated raw data: $data');
       if (data is Map) {
         final field = data['field'];
         final value = data['value'];
         debugPrint('[SocketService] Recibido fieldUpdated: field=$field, value=$value');
         if (field is String && value != null) {
           final callbacks = _fieldUpdateCallbacks[field];
-          if (callbacks != null) {
-            for (var callback in callbacks) {
+          if (callbacks != null && callbacks.isNotEmpty) {
+            for (var callback in List.from(callbacks)) {
               callback(value.toString());
             }
           }
+        }
+      }
+    }
+
+    _socket!.on(SocketEvents.serverFieldUpdated, handleIncomingField);
+    _socket!.on(SocketEvents.clientUpdateField, handleIncomingField);
+    _socket!.on('novedad_creada', (data) {
+      debugPrint('[SocketService] Recibido evento directo "novedad_creada": $data');
+      final callbacks = _fieldUpdateCallbacks['novedad_creada'];
+      if (callbacks != null && callbacks.isNotEmpty) {
+        for (var callback in List.from(callbacks)) {
+          callback(data is String ? data : (data != null ? data.toString() : ''));
         }
       }
     });
@@ -105,15 +156,20 @@ class SocketService {
 
   void registerFieldListener(String fieldId, void Function(String) callback) {
     _fieldUpdateCallbacks.putIfAbsent(fieldId, () => []).add(callback);
+    debugPrint('[SocketService] Registrado listener para "$fieldId" (total oyentes: ${_fieldUpdateCallbacks[fieldId]?.length})');
   }
 
   void unregisterFieldListener(String fieldId, void Function(String) callback) {
     _fieldUpdateCallbacks[fieldId]?.remove(callback);
+    debugPrint('[SocketService] Desregistrado listener para "$fieldId"');
   }
 
   // --- MÉTODOS PARA EMITIR DESDE LA UI ---
 
   void joinRecord(String entidad, int id) {
+    _currentEntidad = entidad;
+    _currentRecordId = id;
+    debugPrint('[SocketService] joinRecord($entidad, $id) -> Socket conectado: ${_socket?.connected}');
     _socket?.emit(SocketEvents.clientJoin, {
       'entidad': entidad,
       'id': id,
@@ -129,6 +185,7 @@ class SocketService {
   }
 
   void updateField(String fieldId, String value) {
+    debugPrint('[SocketService] updateField($fieldId) -> Socket conectado: ${_socket?.connected}');
     _socket?.emit(SocketEvents.clientUpdateField, {
       'field': fieldId,
       'value': value,
@@ -136,7 +193,12 @@ class SocketService {
   }
 
   void disconnect() {
+    _isConnecting = false;
+    _currentToken = null;
+    _currentEntidad = null;
+    _currentRecordId = null;
     _socket?.disconnect();
+    _socket?.dispose();
     _socket = null;
     isConnected.value = false;
     lockedFields.value = {};

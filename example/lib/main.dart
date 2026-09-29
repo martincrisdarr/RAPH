@@ -26,6 +26,8 @@ class AutoLoginSession implements IUserSession {
     await prefs.remove('dev_user_email');
     await prefs.remove('dev_user_organismo');
     await prefs.remove('dev_user_roles');
+    await prefs.remove('dev_user_username');
+    RaphAuthController.instance.username = null;
     _onLogout?.call();
   }
 }
@@ -64,6 +66,10 @@ class _DevLoginAppState extends State<DevLoginApp> {
       final email = prefs.getString('dev_user_email') ?? '';
       final organismo = prefs.getString('dev_user_organismo');
       final roles = prefs.getStringList('dev_user_roles') ?? const [];
+      final savedUser = prefs.getString('dev_user_username');
+      if (savedUser != null && savedUser.isNotEmpty) {
+        RaphAuthController.instance.username = savedUser;
+      }
       setState(() {
         _session = AutoLoginSession(
           UserData(
@@ -143,6 +149,9 @@ class _DevLoginAppState extends State<DevLoginApp> {
           } else {
             await prefs.remove('dev_user_roles');
           }
+          final actualUser = userData['user']?.toString() ?? username;
+          await prefs.setString('dev_user_username', actualUser);
+          RaphAuthController.instance.username = actualUser;
 
           setState(() {
             _session = AutoLoginSession(

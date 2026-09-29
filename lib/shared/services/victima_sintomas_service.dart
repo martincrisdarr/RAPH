@@ -20,7 +20,7 @@ class VictimaSintomasService {
   /// Obtiene el catálogo completo de síntomas activos.
   static Future<List<Sintoma>> obtenerSintomas() async {
     try {
-      final url = Uri.parse('$_baseUrl/ser_sien_dsp_sintoma?filter[activo]=1');
+      final url = Uri.parse('$_baseUrl/ser_sien_dsp_sintoma?filter[activo]=1&per-page=100');
       final response = await http.get(url, headers: _getHeaders());
 
       if (response.statusCode == 200) {
