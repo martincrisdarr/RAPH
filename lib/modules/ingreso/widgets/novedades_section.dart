@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/models/novedad.dart';
 import '../../../shared/services/novedad_service.dart';
+import '../../../shared/services/socket_service.dart';
+import '../../../config/auth_controller.dart';
 import '../controllers/ingreso_controller.dart';
 
 class NovedadesSection extends StatefulWidget {
@@ -39,8 +41,10 @@ class _NovedadesSectionState extends State<NovedadesSection> {
     _cargarLocal();
     if (currentId != null) {
       _fetchNovedades(currentId);
+      SocketService().joinRecord('incidente', currentId);
     }
     _ingresoController.addListener(_onControllerUpdate);
+    SocketService().registerFieldListener('novedad_creada', _onNovedadSocketRecibida);
   }
 
   int? _lastIncidenteId;
@@ -68,6 +72,7 @@ class _NovedadesSectionState extends State<NovedadesSection> {
       
       if (currentId != null) {
         _fetchNovedades(currentId);
+        SocketService().joinRecord('incidente', currentId);
       } else {
         if (mounted) {
           setState(() {
@@ -147,6 +152,22 @@ class _NovedadesSectionState extends State<NovedadesSection> {
         // Si falla, la novedad queda igual en local (sin idNovedad)
       });
       await _guardarLocal();
+
+      // 4. Notificar vía Sockets en tiempo real a las demás cuentas
+      if (creada != null) {
+        final novedadParaEmitir = creada.copyWith(
+          usuario: (creada.usuario != null && creada.usuario!.isNotEmpty)
+              ? creada.usuario
+              : (widget.usuarioActual.isNotEmpty ? widget.usuarioActual : RaphAuthController.instance.currentUsername),
+        );
+        debugPrint('[NovedadesSection] Emitiendo novedad_creada por socket: ${novedadParaEmitir.toJson()}');
+        SocketService().updateField(
+          'novedad_creada',
+          jsonEncode(novedadParaEmitir.toJson()),
+        );
+      } else {
+        debugPrint('[NovedadesSection] Advertencia: creada fue null, no se emitio socket');
+      }
     }
   }
 
@@ -168,8 +189,49 @@ class _NovedadesSectionState extends State<NovedadesSection> {
   String _formatHora(DateTime dt) =>
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
+  void _onNovedadSocketRecibida(String data) {
+    debugPrint('[NovedadesSection] _onNovedadSocketRecibida: $data');
+    if (!mounted) return;
+    try {
+      final decoded = jsonDecode(data);
+      if (decoded is Map) {
+        final map = Map<String, dynamic>.from(decoded);
+        final nueva = Novedad.fromJson(map);
+
+        final currentId = _ingresoController.incidenteActual.idIncidente;
+        debugPrint('[NovedadesSection] currentId: $currentId, nueva.idIncidente: ${nueva.idIncidente}');
+
+        // Solo procesar si pertenece al incidente actual (o si ambos son nulos)
+        if (currentId == null || nueva.idIncidente == null || nueva.idIncidente == currentId) {
+          // Comprobar si ya existe para evitar duplicados (por idNovedad o descripción + remitente)
+          final yaExiste = _novedades.any((n) {
+            if (nueva.idNovedad != null && n.idNovedad != null) {
+              return n.idNovedad == nueva.idNovedad;
+            }
+            return n.descripcion.trim() == nueva.descripcion.trim() &&
+                n.usuario == nueva.usuario;
+          });
+
+          debugPrint('[NovedadesSection] yaExiste en lista: $yaExiste');
+
+          if (!yaExiste) {
+            setState(() {
+              _novedades.add(nueva);
+            });
+            _guardarLocal();
+            _scrollToBottom();
+            debugPrint('[NovedadesSection] Novedad agregada a la lista visual exitosamente');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[NovedadesSection] Error al procesar novedad recibida por socket: $e');
+    }
+  }
+
   @override
   void dispose() {
+    SocketService().unregisterFieldListener('novedad_creada', _onNovedadSocketRecibida);
     _ingresoController.removeListener(_onControllerUpdate);
     _inputController.dispose();
     _scrollController.dispose();

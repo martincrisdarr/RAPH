@@ -20,10 +20,12 @@ class NovedadService {
   /// Crea una nueva novedad en el backend. Retorna la novedad con el ID asignado,
   /// o null si hubo un error.
   static Future<Novedad?> crear(Novedad novedad) async {
-    // Inyectar el legajo/usuario en la novedad si no tiene o si contiene espacios (ej. "Martín Darroux")
-    if (novedad.usuario == null || novedad.usuario!.trim().isEmpty || novedad.usuario!.contains(' ')) {
-      novedad = novedad.copyWith(usuario: 'mdarroux');
+    // Inyectar el legajo/usuario del usuario logueado en la novedad si no tiene o contiene espacios
+    String? user = novedad.usuario;
+    if (user == null || user.trim().isEmpty || user.contains(' ')) {
+      user = RaphAuthController.instance.currentUsername;
     }
+    novedad = novedad.copyWith(usuario: user);
 
     try {
       final response = await http.post(

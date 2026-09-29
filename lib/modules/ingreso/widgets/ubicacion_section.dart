@@ -9,6 +9,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../shared/services/geocoding_service.dart';
 import '../../../shared/services/demanda_recibida_service.dart';
 import '../../../shared/models/demanda_recibida.dart';
+import '../../../shared/utils/string_utils.dart';
 
 class UbicacionSection extends StatefulWidget {
   const UbicacionSection({super.key});
@@ -21,6 +22,7 @@ class _UbicacionSectionState extends State<UbicacionSection> {
   bool _isLinkMode = false;
   final _ingresoController = IngresoController();
   late final TextEditingController _domicilioController;
+  late final FocusNode _domicilioFocusNode;
   GoogleMapController? _mapController;
   bool _isLoadingMap = false;
   Localidad? _localidadSeleccionada = _neuquenDefault;
@@ -86,8 +88,17 @@ class _UbicacionSectionState extends State<UbicacionSection> {
 
   Future<void> _buscarDireccionEnMapa() async {
     if (_isLoadingMap) return;
-    final texto = _domicilioController.text.trim();
+    String texto = _domicilioController.text.trim();
     if (texto.isEmpty) return;
+
+    if (!_isLinkMode) {
+      final formateada = StringUtils.formatearDireccion(texto) ?? texto;
+      if (formateada != texto) {
+        texto = formateada;
+        _domicilioController.text = formateada;
+        _ingresoController.updateIncidente(direccion: formateada);
+      }
+    }
 
     setState(() => _isLoadingMap = true);
 
@@ -121,10 +132,12 @@ class _UbicacionSectionState extends State<UbicacionSection> {
           coords.longitude,
         );
         if (address != null) {
-          direccionFinal = address;
-          _domicilioController.text = address;
+          direccionFinal = StringUtils.formatearDireccion(address) ?? address;
+          _domicilioController.text = direccionFinal;
           setState(() => _isLinkMode = false);
         }
+      } else {
+        direccionFinal = StringUtils.formatearDireccion(direccionFinal) ?? direccionFinal;
       }
 
       // Mover la cámara del mapa
@@ -141,8 +154,9 @@ class _UbicacionSectionState extends State<UbicacionSection> {
       await _ingresoController.syncIncidenteDesdeGoogleMaps();
     } else {
       setState(() => _isLoadingMap = false);
+      final direccionFinal = _isLinkMode ? texto : (StringUtils.formatearDireccion(texto) ?? texto);
       // Si no se ubicó en el mapa, registrar de todas formas el incidente con la dirección ingresada
-      _ingresoController.updateIncidente(direccion: texto);
+      _ingresoController.updateIncidente(direccion: direccionFinal);
       await _ingresoController.syncIncidenteDesdeGoogleMaps();
 
       if (mounted) {
@@ -165,23 +179,43 @@ class _UbicacionSectionState extends State<UbicacionSection> {
     setState(() => _isLoadingMap = false);
 
     if (address != null) {
-      _domicilioController.text = address;
+      final dirFormateada = StringUtils.formatearDireccion(address) ?? address;
+      _domicilioController.text = dirFormateada;
+      _ingresoController.updateIncidente(
+        latitud: coords.latitude,
+        longitud: coords.longitude,
+        direccion: dirFormateada,
+      );
+    } else {
+      final dirFormateada = StringUtils.formatearDireccion(_domicilioController.text) ?? _domicilioController.text;
+      _ingresoController.updateIncidente(
+        latitud: coords.latitude,
+        longitud: coords.longitude,
+        direccion: dirFormateada,
+      );
     }
-
-    _ingresoController.updateIncidente(
-      latitud: coords.latitude,
-      longitud: coords.longitude,
-      direccion: address ?? _domicilioController.text,
-    );
 
     // Sincronizar con el backend: se tiene latitud y longitud confirmadas del mapa
     await _ingresoController.syncIncidenteDesdeGoogleMaps();
+  }
+
+  void _onDomicilioFocusChange() {
+    if (!_domicilioFocusNode.hasFocus && !_isLinkMode) {
+      final actual = _domicilioController.text;
+      final formateada = StringUtils.formatearDireccion(actual) ?? '';
+      if (formateada != actual) {
+        _domicilioController.text = formateada;
+        _ingresoController.updateIncidente(direccion: formateada);
+      }
+    }
   }
 
   @override
   void initState() {
     super.initState();
     _domicilioController = TextEditingController(text: _ingresoController.incidenteActual.direccion ?? '');
+    _domicilioFocusNode = FocusNode();
+    _domicilioFocusNode.addListener(_onDomicilioFocusChange);
     _ingresoController.addListener(_onControllerUpdate);
   }
 
@@ -206,6 +240,8 @@ class _UbicacionSectionState extends State<UbicacionSection> {
 
   @override
   void dispose() {
+    _domicilioFocusNode.removeListener(_onDomicilioFocusChange);
+    _domicilioFocusNode.dispose();
     _ingresoController.removeListener(_onControllerUpdate);
     _domicilioController.dispose();
     super.dispose();
@@ -534,6 +570,8 @@ class _UbicacionSectionState extends State<UbicacionSection> {
               flex: 3,
               child: TextFormField(
                 controller: _domicilioController,
+                focusNode: _domicilioFocusNode,
+                textCapitalization: TextCapitalization.words,
                 onChanged: (val) => _ingresoController.updateIncidente(direccion: val),
                 onFieldSubmitted: (_) => _buscarDireccionEnMapa(),
                 decoration: InputDecoration(

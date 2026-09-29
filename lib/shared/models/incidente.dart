@@ -1,5 +1,6 @@
 import 'victima.dart';
 import 'novedad.dart';
+import '../utils/string_utils.dart';
 
 class Incidente {
   final int? idIncidente;
@@ -55,7 +56,7 @@ class Incidente {
 
     return Incidente(
       idIncidente: json['idincidente'] != null ? int.tryParse(json['idincidente'].toString()) : null,
-      direccion: json['direccion'],
+      direccion: StringUtils.formatearDireccion(json['direccion']),
       idLocalidad: json['idlocalidad'] != null ? int.tryParse(json['idlocalidad'].toString()) : null,
       latitud: json['latitud'] != null ? double.tryParse(json['latitud'].toString()) : null,
       longitud: json['longitud'] != null ? double.tryParse(json['longitud'].toString()) : null,
@@ -88,7 +89,7 @@ class Incidente {
     }
 
     if (idIncidente != null) map['idincidente'] = idIncidente;
-    if (direccion != null) map['direccion'] = direccion;
+    if (direccion != null) map['direccion'] = StringUtils.formatearDireccion(direccion);
     if (idLocalidad != null) map['idlocalidad'] = idLocalidad;
     if (latitud != null) map['latitud'] = latitud;
     if (longitud != null) map['longitud'] = longitud;

@@ -763,7 +763,9 @@ class IngresoController extends ChangeNotifier {
     final int? idIncidente = idInc != null ? int.tryParse(idInc) : null;
 
     _incidenteActual = Incidente.fromJson(incData);
-
+    if (_incidenteActual.idIncidente == null && idIncidente != null) {
+      _incidenteActual = _incidenteActual.copyWith(idIncidente: idIncidente);
+    }
 
     if (_incidenteActual.victimas != null && _incidenteActual.victimas!.isNotEmpty) {
       _victimas = _incidenteActual.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
@@ -795,6 +797,7 @@ class IngresoController extends ChangeNotifier {
           _asegurarTriageRojoVictimas();
         }
         _demandaActual = _demandaActual.copyWith(incidente: _incidenteActual);
+        _sincronizarSocketRoom();
       }
 
       final llamadas = await DemandaRecibidaService.obtenerTodasPorIncidente(idIncidente);

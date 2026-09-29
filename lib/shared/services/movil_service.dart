@@ -27,7 +27,8 @@ class MovilService {
       );
 
       if (response.statusCode == 200) {
-        final decoded = json.decode(response.body);
+        final cleanBody = response.body.replaceFirst('\uFEFF', '').trim();
+        final decoded = json.decode(cleanBody);
         if (decoded is List) {
           return decoded.map((e) => Movil.fromJson(Map<String, dynamic>.from(e))).toList();
         }
