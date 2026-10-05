@@ -474,25 +474,20 @@ class _ListadosPageState extends State<ListadosPage> {
           },
           orElse: () => <String, dynamic>{},
         );
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () async {
-              if (rawMap.isNotEmpty) {
-                await IngresoController().cargarIncidenteDirecto(rawMap);
-              }
-              widget.onNewIncidentTap?.call(false);
-            },
-            child: KanbanCard(
-              title: item.title,
-              subtitle: item.subtitle,
-              time: item.time,
-              moviles: item.moviles,
-              globalStatus: item.status,
-              priority: item.priority,
-              priorityColor: item.priorityColor,
-            ),
-          ),
+        return KanbanCard(
+          title: item.title,
+          subtitle: item.subtitle,
+          time: item.time,
+          moviles: item.moviles,
+          globalStatus: item.status,
+          priority: item.priority,
+          priorityColor: item.priorityColor,
+          onTap: () {
+            if (rawMap.isNotEmpty) {
+              IngresoController().cargarIncidenteDirecto(rawMap);
+            }
+            widget.onNewIncidentTap?.call(false);
+          },
         );
       }).toList();
     }

@@ -774,21 +774,29 @@ class IngresoController extends ChangeNotifier {
     }
     _asegurarTriageRojoVictimas();
 
-    // Al ingresar a un incidente desde el tablero, los campos de INGRESO se mantienen limpios (listos para una nueva llamada)
-    // manteniendo la vinculación al idIncidente
-    _demandaActual = DemandaRecibida(
-      idCfgEstado: 5,
-      idIncidente: idIncidente,
-      incidente: _incidenteActual,
-      fechaHora: DateTime.now(),
-    );
+    if (rawMap.containsKey('iddemandarecibida') || rawMap.containsKey('nro_llamada_entrante')) {
+      _demandaActual = DemandaRecibida.fromJson(rawMap);
+    } else {
+      _demandaActual = DemandaRecibida(
+        idCfgEstado: 5,
+        idIncidente: idIncidente,
+        incidente: _incidenteActual,
+        fechaHora: DateTime.now(),
+      );
+    }
 
     _sincronizarSocketRoom();
-    await _guardarBorrador();
+    _guardarBorrador();
     notifyListeners();
 
-    // Carga diferida (Lazy loading) de los datos profundos del incidente (víctimas, novedades, despachos) solo al ingresar
+    // Carga diferida (Lazy loading) de los datos profundos del incidente (víctimas, novedades, despachos) en segundo plano
     if (idIncidente != null) {
+      _cargarDatosDiferidosIncidente(idIncidente);
+    }
+  }
+
+  Future<void> _cargarDatosDiferidosIncidente(int idIncidente) async {
+    try {
       final incidenteCompleto = await IncidenteService.obtenerPorId(idIncidente);
       if (incidenteCompleto != null) {
         _incidenteActual = incidenteCompleto;
@@ -804,6 +812,8 @@ class IngresoController extends ChangeNotifier {
       _llamadasDelIncidente = llamadas;
       await _guardarBorrador();
       notifyListeners();
+    } catch (e) {
+      debugPrint('[IngresoController] Error en carga diferida de incidente: $e');
     }
   }
 
