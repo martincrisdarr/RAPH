@@ -172,50 +172,50 @@ class _IngresoPageState extends State<IngresoPage> {
                         builder: (context, child) {
                           final controller = IngresoController();
                           if (controller.incidenteActual.idIncidente == null) {
-                            return const SizedBox.shrink();
+                            return const SizedBox(height: 24);
                           }
-                          return const Column(
+                          return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              SizedBox(height: 16),
-                              SizedBox(
+                              const SizedBox(height: 16),
+                              const SizedBox(
                                 height: 400,
                                 child: IngresoSectionCard(
                                   title: 'LLAMADAS RECIBIDAS',
                                   child: LlamadasAsociadasSection(),
                                 ),
                               ),
+                              const SizedBox(height: 16),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 24.0),
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _mostrarDialogoCerrarIncidenteDesdeIngreso(context),
+                                    icon: const Icon(Icons.close_rounded, size: 16),
+                                    label: const Text(
+                                      'SOLICITAR CIERRE',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
+                                      foregroundColor: Colors.redAccent,
+                                      side: const BorderSide(color: Colors.redAccent, width: 1),
+                                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           );
                         },
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 24.0),
-                          child: ElevatedButton.icon(
-                            onPressed: () => _mostrarDialogoCerrarIncidenteDesdeIngreso(context),
-                            icon: const Icon(Icons.close_rounded, size: 16),
-                            label: const Text(
-                              'SOLICITAR CIERRE',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
-                              foregroundColor: Colors.redAccent,
-                              side: const BorderSide(color: Colors.redAccent, width: 1),
-                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
                       ),
                     ],
                   ),

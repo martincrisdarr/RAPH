@@ -26,6 +26,8 @@ class KanbanCard extends StatefulWidget {
   final List<MovilStatus> moviles;
   final String globalStatus;
 
+  final VoidCallback? onTap;
+
   final String? description;
   final String? address;
 
@@ -40,6 +42,7 @@ class KanbanCard extends StatefulWidget {
     required this.globalStatus,
     this.description,
     this.address,
+    this.onTap,
   });
 
   @override
@@ -74,7 +77,7 @@ class _KanbanCardState extends State<KanbanCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    final cardContent = Container(
+    final cardContent = Ink(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -185,7 +188,14 @@ class _KanbanCardState extends State<KanbanCard> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: cardContent,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onTap,
+          child: cardContent,
+        ),
+      ),
     );
   }
 
