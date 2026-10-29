@@ -1,7 +1,18 @@
+import 'package:flutter/foundation.dart';
+
 class ApiConfig {
-  static const String baseUrl = 'http://localhost/RAPH/web';
-  // Cambiar a false cuando el endpoint esté disponible en producción
-  static const bool useLocalSocket = true;
+  // En compilación de Producción (kReleaseMode == true) SIEMPRE usa baseUrlProd y socketUrlProd.
+  // En Desarrollo (flutter run), cambiar a false si se quiere apuntar directo al servidor de Producción.
+  static const bool useLocalInDev = false;
+  static const bool useLocalSocket = false;
+
+  static const String baseUrlProd = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web';
+  static const String baseUrlLocal = 'http://localhost/RAPH/web';
+
+  static const String baseUrl = (!kReleaseMode && useLocalInDev)
+      ? baseUrlLocal
+      : baseUrlProd;
+
   static const String socketUrlProd = 'https://emergenciasyriesgos.neuquen.gov.ar/giro';
   static const String socketUrlLocal = 'http://localhost:3001';
 
@@ -10,8 +21,9 @@ class ApiConfig {
   static const String unidadesVehicularesUrl =
       '$giroApiBaseUrl/ser_veh_vie_unidad_despacho?filter[id_tipo_unidad]=11';
 
-  static String get socketUrl => useLocalSocket ? socketUrlLocal : socketUrlProd;
+  static String get socketUrl => (!kReleaseMode && useLocalSocket)
+      ? socketUrlLocal
+      : socketUrlProd;
 
   ApiConfig._();
 }
-
