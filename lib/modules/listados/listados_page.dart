@@ -135,30 +135,37 @@ class _ListadosPageState extends State<ListadosPage> {
 
               bool tieneDespacho = false;
               if (v['despachos'] is List) {
-                for (final d in (v['despachos'] as List)) {
-                  if (d is Map && (d['activo'] == null || d['activo'].toString() != '0')) {
-                    tieneDespacho = true;
-                    String mNombre = 'Móvil';
-                    if (d['movilunidad'] is Map) {
-                      final mu = d['movilunidad'];
-                      if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
-                        mNombre = mu['movil']['nombre'].toString();
-                      } else if (mu['nombre'] != null) {
-                        mNombre = mu['nombre'].toString();
-                      } else if (mu['patente'] != null) {
-                        mNombre = 'Unidad ${mu['patente']}';
-                      }
+                // Filtrar solo los despachos ACTIVOS (activo == 1), ignorando cancelados (activo == 2) y eliminados (activo == 0)
+                final despachosActivos = (v['despachos'] as List).where((d) {
+                  if (d is! Map) return false;
+                  final act = d['activo'];
+                  return act == 1 || act == '1' || act == true;
+                }).toList();
+
+                if (despachosActivos.isNotEmpty) {
+                  // Tomar el despacho activo más reciente para esta víctima
+                  final d = despachosActivos.last as Map;
+                  tieneDespacho = true;
+                  String mNombre = 'Móvil';
+                  if (d['movilunidad'] is Map) {
+                    final mu = d['movilunidad'];
+                    if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+                      mNombre = mu['movil']['nombre'].toString();
+                    } else if (mu['nombre'] != null) {
+                      mNombre = mu['nombre'].toString();
+                    } else if (mu['patente'] != null) {
+                      mNombre = 'Unidad ${mu['patente']}';
                     }
-                    moviles.add(MovilStatus(
-                      nombre: mNombre,
-                      status: 'Despachado',
-                      victimaNombre: vNombre,
-                      tieneMovil: true,
-                      lastStatusChange: d['fechahoradespacho'] != null
-                          ? DateTime.tryParse(d['fechahoradespacho'].toString()) ?? DateTime.now()
-                          : DateTime.now(),
-                    ));
                   }
+                  moviles.add(MovilStatus(
+                    nombre: mNombre,
+                    status: 'Despachado',
+                    victimaNombre: vNombre,
+                    tieneMovil: true,
+                    lastStatusChange: d['fechahoradespacho'] != null
+                        ? DateTime.tryParse(d['fechahoradespacho'].toString()) ?? DateTime.now()
+                        : DateTime.now(),
+                  ));
                 }
               }
 

@@ -29,37 +29,125 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
   // Cache de íconos personalizados de móviles para Google Maps
   final Map<String, BitmapDescriptor> _movilMarkerCache = {};
 
-  Future<BitmapDescriptor> _getMovilMarkerIcon(Color color) async {
-    final key = 'movil_cross_${color.toARGB32()}';
+  Color _getMovilStatusColor(String estado) {
+    switch (estado) {
+      case 'Disponible':
+        return const Color(0xFF10B981); // Verde Esmeralda (Disponible)
+      case 'Despachado':
+        return const Color(0xFFFF9800); // Naranja Ámbar de emergencia (Despachado)
+      case 'En sitio':
+        return const Color(0xFF06B6D4); // Cyan
+      case 'Traslado':
+        return const Color(0xFFA855F7); // Violeta/Púrpura
+      case 'Inactivo':
+      case 'Mantenimiento':
+        return const Color(0xFFEF4444); // Rojo
+      default:
+        return const Color(0xFF94A3B8); // Gris
+    }
+  }
+
+  Future<BitmapDescriptor> _getMovilMarkerIcon(Color color, String estado) async {
+    final key = 'movil_ambulance_${color.toARGB32()}_$estado';
     if (_movilMarkerCache.containsKey(key)) {
       return _movilMarkerCache[key]!;
     }
 
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    const double size = 36.0;
-    final double center = size / 2;
+    const double size = 48.0;
+    const double center = size / 2;
 
-    // Fondo circular oscuro
+    // 1. Sombra exterior
+    final Paint shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.45)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+    canvas.drawCircle(const Offset(center, center + 1.5), 20, shadowPaint);
+
+    // 2. Fondo circular oscuro con borde del color del estado
     final Paint bgPaint = Paint()..color = const Color(0xFF0F172A);
     final Paint borderPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
+      ..strokeWidth = 3.2;
 
-    canvas.drawCircle(Offset(center, center), center - 2, bgPaint);
-    canvas.drawCircle(Offset(center, center), center - 2, borderPaint);
+    canvas.drawCircle(const Offset(center, center), 20, bgPaint);
+    canvas.drawCircle(const Offset(center, center), 20, borderPaint);
 
-    // Dibujar Cruz Médica ✚ en el centro con Paint
-    final Paint crossPaint = Paint()
+    // 3. Sirena de emergencia en el techo con luz roja / naranja / azul
+    final Paint sirenPaint = Paint()
+      ..color = (estado == 'Despachado' ? const Color(0xFFFF3D00) : color);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: const Offset(center - 1, center - 8.5), width: 7, height: 3),
+        const Radius.circular(1.5),
+      ),
+      sirenPaint,
+    );
+
+    // 4. Carrocería de la Ambulancia en color blanco nítido
+    final Paint bodyPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final Path ambulancePath = Path();
+    const double ox = 12.0; // Desplazamiento X
+    const double oy = 17.5; // Desplazamiento Y
+
+    ambulancePath.moveTo(ox + 1, oy + 2); // Esquina trasera superior
+    ambulancePath.lineTo(ox + 15, oy + 2); // Techo del furgón
+    ambulancePath.lineTo(ox + 19, oy + 6); // Parabrisas inclinado hacia el capó
+    ambulancePath.lineTo(ox + 23, oy + 6.5); // Capó delantero
+    ambulancePath.quadraticBezierTo(ox + 24, oy + 7, ox + 24, oy + 9); // Frente curva
+    ambulancePath.lineTo(ox + 24, oy + 12); // Paragolpes delantero
+    ambulancePath.lineTo(ox + 20, oy + 12); // Base delantera
+    ambulancePath.lineTo(ox + 20, oy + 9.5); // Hueco rueda delantera
+    ambulancePath.lineTo(ox + 15, oy + 9.5);
+    ambulancePath.lineTo(ox + 15, oy + 12); // Entre ruedas
+    ambulancePath.lineTo(ox + 9, oy + 12);
+    ambulancePath.lineTo(ox + 9, oy + 9.5); // Hueco rueda trasera
+    ambulancePath.lineTo(ox + 4, oy + 9.5);
+    ambulancePath.lineTo(ox + 4, oy + 12);
+    ambulancePath.lineTo(ox + 1, oy + 12); // Paragolpes trasero
+    ambulancePath.close();
+
+    canvas.drawPath(ambulancePath, bodyPaint);
+
+    // 5. Ventana frontal de la cabina (Celeste oscuro / azul medianoche)
+    final Paint windowPaint = Paint()..color = const Color(0xFF0F172A);
+    final Path cabinWindow = Path();
+    cabinWindow.moveTo(ox + 15, oy + 3.5);
+    cabinWindow.lineTo(ox + 18, oy + 6.5);
+    cabinWindow.lineTo(ox + 15, oy + 6.5);
+    cabinWindow.close();
+    canvas.drawPath(cabinWindow, windowPaint);
+
+    // 6. Franja de emergencia lateral con el color del estado
+    final Paint stripePaint = Paint()
       ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.5
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(const Offset(ox + 2, oy + 7.5), const Offset(ox + 13, oy + 7.5), stripePaint);
 
-    const double crossRadius = 6.5;
-    canvas.drawLine(Offset(center - crossRadius, center), Offset(center + crossRadius, center), crossPaint);
-    canvas.drawLine(Offset(center, center - crossRadius), Offset(center, center + crossRadius), crossPaint);
+    // 7. Cruz médica pequeña roja en el lateral
+    final Paint crossPaint = Paint()
+      ..color = const Color(0xFFEF4444)
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.square;
+    canvas.drawLine(const Offset(ox + 6.5, oy + 5), const Offset(ox + 6.5, oy + 9.5), crossPaint);
+    canvas.drawLine(const Offset(ox + 4.5, oy + 7.25), const Offset(ox + 8.5, oy + 7.25), crossPaint);
+
+    // 8. Ruedas (Neumáticos oscuros con llanta blanca)
+    final Paint wheelTire = Paint()..color = const Color(0xFF1E293B);
+    final Paint wheelRim = Paint()..color = Colors.white70;
+
+    // Rueda trasera
+    canvas.drawCircle(const Offset(ox + 6.5, oy + 11.5), 2.8, wheelTire);
+    canvas.drawCircle(const Offset(ox + 6.5, oy + 11.5), 1.2, wheelRim);
+
+    // Rueda delantera
+    canvas.drawCircle(const Offset(ox + 17.5, oy + 11.5), 2.8, wheelTire);
+    canvas.drawCircle(const Offset(ox + 17.5, oy + 11.5), 1.2, wheelRim);
 
     final ui.Image image = await pictureRecorder.endRecording().toImage(size.toInt(), size.toInt());
     final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -71,9 +159,24 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
   // Estado local de selección
   DemandaRecibida? _selectedIncident;
   Movil? _selectedMovil;
+  Offset? _selectedMovilScreenPos;
+  Size _mapSize = Size.zero;
   Timer? _incidentesTimer;
   List<Map<String, dynamic>> _despachosIncidentActivo = [];
   bool _isLoadingDespachos = false;
+
+  Future<void> _actualizarPosicionCardMovil([Movil? targetMovil]) async {
+    final m = targetMovil ?? _selectedMovil;
+    if (m == null || _mapController == null) return;
+    try {
+      final screenCoord = await _mapController!.getScreenCoordinate(LatLng(m.latitud, m.longitud));
+      if (mounted) {
+        setState(() {
+          _selectedMovilScreenPos = Offset(screenCoord.x.toDouble(), screenCoord.y.toDouble());
+        });
+      }
+    } catch (_) {}
+  }
 
   Future<void> _cargarDespachosDeIncidente(int idIncidente) async {
     setState(() => _isLoadingDespachos = true);
@@ -110,9 +213,9 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
   Color _getCategoriaColor(String categoria) {
     switch (categoria) {
       case 'Activo':
-        return AppColors.accentGreen;
+        return const Color(0xFF10B981);
       case 'En tránsito':
-        return AppColors.accentBlue;
+        return const Color(0xFFFF9800);
       case 'Inactivo':
       default:
         return Colors.white38;
@@ -164,7 +267,6 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
     _controller.inicializar();
-    _controller.cargarIncidentesActivos();
     _iniciarPollingIncidentes();
   }
 
@@ -188,6 +290,10 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
       }
       if (_tabController.index == 0 && _selectedIncident == null) {
         _controller.cargarIncidentesActivos();
+      }
+      // Actualizar móviles activos y sus ubicaciones GPS en vivo
+      if (_tabController.index == 0) {
+        _controller.cargarMoviles();
       }
     });
   }
@@ -480,6 +586,50 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                           nombresAsignados.add(m.nombre);
                         }
                       }
+                      // 1. Verificar si las víctimas del incidente ya traen móviles asignados/despachos
+                      if (inc.victimas != null) {
+                        for (var v in inc.victimas!) {
+                          if (v.nombreMovilAsignado != null && v.nombreMovilAsignado!.isNotEmpty) {
+                            nombresAsignados.add(v.nombreMovilAsignado!);
+                          } else if (v.idMovilAsignado != null && v.idMovilAsignado!.isNotEmpty) {
+                            final cleanV = v.idMovilAsignado!.replaceAll(RegExp(r'[^0-9]'), '');
+                            final mMatch = _controller.moviles.where((m) {
+                              final cleanM = m.id.replaceAll(RegExp(r'[^0-9]'), '');
+                              return m.id == v.idMovilAsignado ||
+                                  (cleanM.isNotEmpty && cleanM == cleanV) ||
+                                  m.idUnidadAsignada == v.idMovilAsignado;
+                            });
+                            if (mMatch.isNotEmpty) {
+                              nombresAsignados.add(mMatch.first.nombre);
+                            } else {
+                              nombresAsignados.add('Móvil ${v.idMovilAsignado}');
+                            }
+                          }
+                        }
+                      }
+                      // 2. Verificar si el incidente trae despachos directos activos
+                      if (inc.despachos != null) {
+                        for (var d in inc.despachos!) {
+                          if (d is Map) {
+                            final act = d['activo'];
+                            if (act == 1 || act == '1' || act == true) {
+                              final n = d['movil']?['nombre'] ?? d['movilunidad']?['movil']?['nombre'];
+                              if (n != null && n.toString().isNotEmpty) {
+                                nombresAsignados.add(n.toString());
+                              } else if (d['idmovilunidad'] != null) {
+                                final dMu = d['idmovilunidad'].toString();
+                                final mMatch = _controller.moviles.where((m) => m.id == dMu || m.idUnidadAsignada == dMu);
+                                if (mMatch.isNotEmpty) {
+                                  nombresAsignados.add(mMatch.first.nombre);
+                                } else {
+                                  nombresAsignados.add('Móvil $dMu');
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      // 3. Si además está seleccionado actualmente y se cargaron los despachos en vivo
                       if (isCurrentSelected && _despachosIncidentActivo.isNotEmpty) {
                         for (var d in _despachosIncidentActivo) {
                           final n = d['movil']?['nombre'] ?? d['movilunidad']?['movil']?['nombre'];
@@ -601,39 +751,55 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
     );
   }
 
-Widget _buildMapContainer(ThemeData theme) {
+  Widget _buildMapContainer(ThemeData theme) {
     final bool mapsSupported = kIsWeb ||
         defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        child: Stack(
-          children: [
-            mapsSupported 
-                ? _buildRealGoogleMap()
-                : SimulatedMapWidget(
-                    incidentes: _controller.incidentesActivos,
-                    moviles: _controller.moviles,
-                    selectedIncident: _selectedIncident,
-                    onSelectIncident: (inc) {
-                      _controller.cargarMoviles();
-                      setState(() {
-                        _selectedIncident = inc;
-                        _selectedMovil = null;
-                      });
-                    },
-                  ),
-            if (_selectedMovil != null) _buildSelectedMovilCard(theme),
-          ],
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _mapSize = Size(constraints.maxWidth, constraints.maxHeight);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadii.lg),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadii.lg),
+            child: Stack(
+              children: [
+                mapsSupported 
+                    ? _buildRealGoogleMap()
+                    : SimulatedMapWidget(
+                        incidentes: _controller.incidentesActivos,
+                        moviles: _controller.moviles,
+                        selectedIncident: _selectedIncident,
+                        onSelectIncident: (inc) {
+                          setState(() {
+                            _selectedIncident = inc;
+                            _selectedMovil = null;
+                            _despachosIncidentActivo = [];
+                          });
+                          final idInc = inc.incidente?.idIncidente ?? inc.idDemandaRecibida;
+                          if (idInc != null) {
+                            _cargarDespachosDeIncidente(idInc);
+                          }
+                        },
+                        onSelectMovil: (m) {
+                          setState(() {
+                            _selectedMovil = m;
+                            _selectedMovilScreenPos = null;
+                          });
+                        },
+                      ),
+                if (_selectedMovil != null) _buildSelectedMovilCard(theme),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -657,31 +823,33 @@ Widget _buildMapContainer(ThemeData theme) {
               title: 'Incidente: ${inc.direccion ?? 'Sin dirección'}',
             ),
             onTap: () {
-              _controller.cargarMoviles();
               setState(() {
                 _selectedIncident = demanda;
+                _despachosIncidentActivo = [];
               });
+              final idInc = demanda.incidente?.idIncidente ?? demanda.idDemandaRecibida;
+              if (idInc != null) {
+                _cargarDespachosDeIncidente(idInc);
+              }
             },
           ),
         );
       }
     }
 
-    // Marcadores de móviles (Ambulancias con insignia especial)
+    // Marcadores de móviles con GPS activo (Disponibles y Despachados)
     for (var m in _controller.moviles) {
-      if (m.estado != 'Inactivo') {
-        Color stateColor = Colors.cyan;
-        if (m.estado == 'Disponible') stateColor = AppColors.accentGreen;
-        if (m.estado == 'Despachado') stateColor = AppColors.accentBlue;
-        if (m.estado == 'En sitio') stateColor = Colors.cyanAccent;
-        if (m.estado == 'Traslado') stateColor = AppColors.accentPurple;
+      if (m.tieneGpsActivo && m.estado != 'Inactivo') {
+        final Color stateColor = _getMovilStatusColor(m.estado);
 
-        BitmapDescriptor customIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
-        final cached = _movilMarkerCache['movil_cross_${stateColor.toARGB32()}'];
+        BitmapDescriptor customIcon = BitmapDescriptor.defaultMarkerWithHue(
+          m.estado == 'Disponible' ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange,
+        );
+        final cached = _movilMarkerCache['movil_ambulance_${stateColor.toARGB32()}_${m.estado}'];
         if (cached != null) {
           customIcon = cached;
         } else {
-          _getMovilMarkerIcon(stateColor).then((_) {
+          _getMovilMarkerIcon(stateColor, m.estado).then((_) {
             if (mounted) setState(() {});
           });
         }
@@ -691,10 +859,12 @@ Widget _buildMapContainer(ThemeData theme) {
             markerId: MarkerId('mov_${m.id}'),
             position: LatLng(m.latitud, m.longitud),
             icon: customIcon,
-            onTap: () {
+            consumeTapEvents: true, // Evita la ventana blanca nativa de Google Maps
+            onTap: () async {
               setState(() {
                 _selectedMovil = m;
               });
+              await _actualizarPosicionCardMovil(m);
             },
           ),
         );
@@ -709,58 +879,569 @@ Widget _buildMapContainer(ThemeData theme) {
       markers: markers,
       myLocationButtonEnabled: false,
       zoomControlsEnabled: true,
-      onMapCreated: (c) => _mapController = c,
+      onMapCreated: (c) {
+        _mapController = c;
+        if (_selectedMovil != null) {
+          _actualizarPosicionCardMovil();
+        }
+      },
+      onCameraMove: (position) {
+        if (_selectedMovil != null) {
+          _actualizarPosicionCardMovil();
+        }
+      },
+      onTap: (_) {
+        if (_selectedMovil != null) {
+          setState(() {
+            _selectedMovil = null;
+          });
+        }
+      },
     );
   }
 
   Widget _buildSelectedMovilCard(ThemeData theme) {
     final m = _selectedMovil!;
-    Color stateColor = Colors.grey;
-    if (m.estado == 'Disponible') stateColor = AppColors.accentGreen;
-    if (m.estado == 'Despachado') stateColor = AppColors.accentBlue;
-    if (m.estado == 'En sitio') stateColor = Colors.cyanAccent;
-    if (m.estado == 'Traslado') stateColor = AppColors.accentPurple;
+    final Color stateColor = _getMovilStatusColor(m.estado);
+    final bool esDisponible = m.estado.trim().toLowerCase() == 'disponible' || m.idmovilEstado == 1;
+
+    const double cardWidth = 370;
+
+    // Calcular posición sobre el mapa
+    double left = (_mapSize.width - cardWidth) / 2;
+    double? top;
+    double? bottom;
+    bool isPointingDown = true;
+
+    if (_selectedMovilScreenPos != null && _mapSize != Size.zero) {
+      final markerX = _selectedMovilScreenPos!.dx;
+      final markerY = _selectedMovilScreenPos!.dy;
+
+      left = markerX - (cardWidth / 2);
+      final maxLeft = (_mapSize.width - cardWidth - 12.0).clamp(12.0, double.infinity);
+      left = left.clamp(12.0, maxLeft);
+
+      if (markerY < 320) {
+        // Si está cerca del borde superior, colocarlo DEBAJO del marcador
+        top = (markerY + 28).clamp(12.0, (_mapSize.height - 100).clamp(12.0, double.infinity));
+        isPointingDown = false;
+      } else {
+        // Por defecto, colocarlo ARRIBA del marcador como globo de diálogo
+        bottom = (_mapSize.height - (markerY - 14)).clamp(12.0, (_mapSize.height - 100).clamp(12.0, double.infinity));
+        isPointingDown = true;
+      }
+    } else {
+      top = 24;
+    }
 
     return Positioned(
-      top: 16,
-      left: 16,
-      child: Material(
-        elevation: 6,
-        borderRadius: BorderRadius.circular(20),
-        color: const Color(0xFF0F172A),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: stateColor, width: 2),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.medical_services_rounded, size: 16, color: stateColor),
-              const SizedBox(width: 8),
-              Text(
-                '${m.nombre} • ${m.estado}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 10),
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () => setState(() => _selectedMovil = null),
-                  child: const Icon(Icons.close, size: 16, color: Colors.white60),
-                ),
+      left: left,
+      top: top,
+      bottom: bottom,
+      width: cardWidth,
+      child: PointerInterceptor(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isPointingDown) ...[
+              CustomPaint(
+                size: const Size(18, 9),
+                painter: _TrianglePointerPainter(color: const Color(0xFF0F172A), pointingDown: false),
               ),
             ],
-          ),
+            Material(
+              elevation: 16,
+              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xFF0F172A),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: stateColor.withValues(alpha: 0.7), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Encabezado del móvil
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: stateColor.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: stateColor.withValues(alpha: 0.5)),
+                          ),
+                          child: Icon(Icons.airport_shuttle_rounded, size: 18, color: stateColor),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    m.nombre,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: stateColor.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      m.estado.toUpperCase(),
+                                      style: TextStyle(
+                                        color: stateColor,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                [
+                                  if (m.patente != null && m.patente!.trim().isNotEmpty) 'Patente: ${m.patente}',
+                                  if (m.usuarioActivo != null) 'Op: ${m.usuarioActivo}',
+                                ].join(' • '),
+                                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16, color: Colors.white60),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setState(() => _selectedMovil = null),
+                          tooltip: 'Cerrar',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1, color: Colors.white12),
+                    const SizedBox(height: 8),
+
+                    // CUERPO: ASIGNACIÓN RÁPIDA DE VÍCTIMAS / INCIDENTES
+                    if (esDisponible) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.flash_on_rounded, size: 14, color: AppColors.accentGreen),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'ASIGNACIÓN RÁPIDA A VÍCTIMA:',
+                            style: TextStyle(
+                              color: AppColors.accentGreen,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${_controller.incidentesActivos.length} activos',
+                            style: const TextStyle(color: Colors.white38, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (_controller.incidentesActivos.isEmpty) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                          child: Center(
+                            child: Text(
+                              'No hay incidentes activos en espera de móvil.',
+                              style: TextStyle(color: Colors.white38, fontSize: 11, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 250),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: _controller.incidentesActivos.map((demanda) {
+                                final inc = demanda.incidente;
+                                if (inc == null) return const SizedBox.shrink();
+                                final idInc = inc.idIncidente ?? demanda.idDemandaRecibida;
+                                final isSelected = _selectedIncident?.idDemandaRecibida == demanda.idDemandaRecibida;
+                                final priorityColor = _getPrioridadColor(inc);
+                                final priorityLabel = _getPrioridadLabel(inc);
+                                final isRojo = _isIncidenteRojo(inc);
+                                final victimas = inc.victimas ?? [];
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppColors.accentBlue.withValues(alpha: 0.12)
+                                        : Colors.white.withValues(alpha: 0.04),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected ? AppColors.accentBlue : priorityColor.withValues(alpha: 0.4),
+                                      width: isSelected ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Cabecera del incidente
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: priorityColor.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: Text(
+                                              priorityLabel,
+                                              style: TextStyle(color: priorityColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '#$idInc',
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              inc.direccion ?? 'Sin dirección',
+                                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (isSelected)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.accentBlue.withValues(alpha: 0.25),
+                                                borderRadius: BorderRadius.circular(3),
+                                              ),
+                                              child: const Text('ABIERTO', style: TextStyle(color: AppColors.accentBlue, fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5),
+
+                                      // Víctimas del incidente
+                                      if (victimas.isNotEmpty) ...[
+                                        ...victimas.map((v) {
+                                          final bool yaAsignado = v.idMovilAsignado != null && v.idMovilAsignado!.isNotEmpty;
+                                          return Container(
+                                            margin: const EdgeInsets.only(top: 3),
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: yaAsignado
+                                                  ? Colors.white.withValues(alpha: 0.02)
+                                                  : const Color(0xFF10B981).withValues(alpha: 0.08),
+                                              borderRadius: BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: yaAsignado ? Colors.white10 : const Color(0xFF10B981).withValues(alpha: 0.25),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.person, size: 12, color: Colors.white70),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        v.nombresApellidos ?? 'Víctima sin nombre',
+                                                        style: TextStyle(
+                                                          color: yaAsignado ? Colors.white60 : Colors.white,
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      if (yaAsignado)
+                                                        Text(
+                                                          'Asignado a: ${v.idMovilAsignado}',
+                                                          style: const TextStyle(color: Colors.white38, fontSize: 9.5),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: yaAsignado ? Colors.white24 : const Color(0xFF10B981),
+                                                    foregroundColor: Colors.white,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    minimumSize: const Size(54, 22),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                                    elevation: 0,
+                                                  ),
+                                                  onPressed: () async {
+                                                    await _ejecutarDespachoAVictima(demanda, v, m);
+                                                  },
+                                                  child: Text(
+                                                    yaAsignado ? 'REASIGNAR' : 'ASIGNAR',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }),
+                                      ] else if (isRojo) ...[
+                                        // Código Rojo sin víctimas
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Expanded(
+                                              child: Text(
+                                                '⚡ Código Rojo (Sin víctimas)',
+                                                style: TextStyle(color: AppColors.accentRed, fontSize: 10, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: AppColors.accentRed,
+                                                foregroundColor: Colors.white,
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                minimumSize: const Size(60, 22),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                                elevation: 0,
+                                              ),
+                                              onPressed: () async {
+                                                await _ejecutarDespachoSinVictima(demanda, m);
+                                              },
+                                              child: const Text('DESPACHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9.5)),
+                                            ),
+                                          ],
+                                        ),
+                                      ] else ...[
+                                        // Sin víctimas y no es código rojo
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Expanded(
+                                              child: Text(
+                                                'Requiere víctimas registradas',
+                                                style: TextStyle(color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic),
+                                              ),
+                                            ),
+                                            TextButton(
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: AppColors.accentBlue,
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                minimumSize: const Size(0, 20),
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _selectedIncident = demanda;
+                                                  _selectedMovil = null;
+                                                });
+                                                if (idInc != null) _cargarDespachosDeIncidente(idInc);
+                                              },
+                                              child: const Text('Abrir Incidente', style: TextStyle(fontSize: 10)),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ] else ...[
+                      // Si el móvil está despachado
+                      if (m.idIncidenteActivo != null) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on, size: 14, color: Color(0xFFFF9800)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Asignado a Incidente #${m.idIncidenteActivo}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              minimumSize: const Size(0, 28),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            icon: const Icon(Icons.visibility, size: 13),
+                            label: Text(
+                              'Ver Incidente #${m.idIncidenteActivo}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                            onPressed: () => _enfocarIncidenteDeMovil(m.idIncidenteActivo!),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.accentRed,
+                            side: BorderSide(color: AppColors.accentRed.withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            minimumSize: const Size(0, 28),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          ),
+                          icon: const Icon(Icons.cancel_outlined, size: 13),
+                          label: const Text(
+                            'Liberar Móvil / Cancelar Despacho',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () => _confirmarYDesasignarMovil(m),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (isPointingDown) ...[
+              CustomPaint(
+                size: const Size(18, 9),
+                painter: _TrianglePointerPainter(color: const Color(0xFF0F172A), pointingDown: true),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
+
+  void _enfocarIncidenteDeMovil(int idIncidente) {
+    final match = _controller.incidentesActivos.where(
+      (d) => d.incidente?.idIncidente == idIncidente || d.idDemandaRecibida == idIncidente,
+    );
+    if (match.isNotEmpty) {
+      setState(() {
+        _selectedIncident = match.first;
+        _selectedMovil = null;
+        _despachosIncidentActivo = [];
+      });
+      _cargarDespachosDeIncidente(idIncidente);
+    } else {
+      AppToast.show(
+        context,
+        title: 'Incidente no encontrado',
+        message: 'El incidente #$idIncidente no está en la lista de activos.',
+        type: ToastType.warning,
+      );
+    }
+  }
+
+  Future<void> _confirmarYDesasignarMovil(Movil m) async {
+    final confirmar = await ConfirmCancelDispatchDialog.show(
+      context,
+      movilNombre: m.nombre,
+      detalle: m.idIncidenteActivo != null ? 'Incidente #${m.idIncidenteActivo}' : 'Despacho activo',
+    );
+    if (confirmar != true) return;
+
+    await _controller.liberarMovilDeIncidente(m.id, idIncidente: m.idIncidenteActivo);
+    if (m.idIncidenteActivo != null) {
+      await _cargarDespachosDeIncidente(m.idIncidenteActivo!);
+    }
+    await _controller.cargarIncidentesActivos();
+    await _controller.cargarMoviles();
+
+    if (mounted) {
+      setState(() {
+        _selectedMovil = null;
+      });
+      AppToast.show(
+        context,
+        title: 'Móvil Liberado',
+        message: 'El móvil ${m.nombre} volvió a estar disponible.',
+        type: ToastType.cancelado,
+      );
+    }
+  }
+
+
+  Future<void> _ejecutarDespachoSinVictima(DemandaRecibida demanda, Movil movil) async {
+    final inc = demanda.incidente;
+    final idInc = inc?.idIncidente ?? demanda.idDemandaRecibida;
+    if (idInc == null) return;
+
+    setState(() {
+      _selectedIncident = demanda;
+      _selectedMovil = null;
+    });
+
+    await _controller.despacharMovilAIncidenteSinVictima(idInc, movil.id);
+    await _cargarDespachosDeIncidente(idInc);
+    await _controller.cargarIncidentesActivos();
+    await _controller.cargarMoviles();
+
+    if (mounted) {
+      AppToast.show(
+        context,
+        title: 'Móvil Despachado (Código Rojo)',
+        message: 'Móvil ${movil.nombre} despachado al incidente #$idInc.',
+        type: ToastType.despacho,
+      );
+    }
+  }
+
+  Future<void> _ejecutarDespachoAVictima(DemandaRecibida demanda, Victima victima, Movil movil) async {
+    final inc = demanda.incidente;
+    final idInc = inc?.idIncidente ?? demanda.idDemandaRecibida;
+    if (idInc == null || victima.idVictima == null) return;
+
+    setState(() {
+      _selectedIncident = demanda;
+      _selectedMovil = null;
+    });
+
+    await _controller.asignarMovilAVictima(idInc, victima.idVictima!, movil.id);
+    await _cargarDespachosDeIncidente(idInc);
+    await _controller.cargarIncidentesActivos();
+    await _controller.cargarMoviles();
+
+    if (mounted) {
+      AppToast.show(
+        context,
+        title: 'Móvil Despachado',
+        message: 'Móvil ${movil.nombre} asignado a ${victima.nombresApellidos ?? "la víctima"} en incidente #$idInc.',
+        type: ToastType.despacho,
+      );
+    }
+  }
+
 
   Widget _buildDispatchDetailPanel(ThemeData theme) {
     final demanda = _selectedIncident!;
@@ -2909,6 +3590,7 @@ class SimulatedMapWidget extends StatelessWidget {
   final List<Movil> moviles;
   final DemandaRecibida? selectedIncident;
   final ValueChanged<DemandaRecibida> onSelectIncident;
+  final ValueChanged<Movil>? onSelectMovil;
 
   const SimulatedMapWidget({
     super.key,
@@ -2916,6 +3598,7 @@ class SimulatedMapWidget extends StatelessWidget {
     required this.moviles,
     required this.selectedIncident,
     required this.onSelectIncident,
+    this.onSelectMovil,
   });
 
   @override
@@ -2941,7 +3624,7 @@ class SimulatedMapWidget extends StatelessWidget {
 
         // 1. Dibuja las líneas de ruta para móviles asignados a incidentes
         for (var m in moviles) {
-          if (m.estado != 'Inactivo' && m.idIncidenteActivo != null) {
+          if (m.tieneGpsActivo && m.estado != 'Inactivo' && m.idIncidenteActivo != null) {
             final inc = incidentes.cast<DemandaRecibida?>().firstWhere(
               (elem) => (elem?.incidente?.idIncidente == m.idIncidenteActivo || elem?.idDemandaRecibida == m.idIncidenteActivo),
               orElse: () => null,
@@ -3043,40 +3726,49 @@ class SimulatedMapWidget extends StatelessWidget {
           }
         }
 
-        // 3. Coloca marcadores de móviles (Insignia compacta médica)
+        // 3. Coloca marcadores de móviles activos con GPS (Disponibles y Despachados)
         for (var m in moviles) {
-          if (m.estado != 'Inactivo') {
+          if (m.tieneGpsActivo && m.estado != 'Inactivo') {
             final pos = convertCoords(m.latitud, m.longitud);
-            Color stateColor = Colors.grey;
-            if (m.estado == 'Disponible') stateColor = AppColors.accentGreen;
-            if (m.estado == 'Despachado') stateColor = AppColors.accentBlue;
-            if (m.estado == 'En sitio') stateColor = Colors.cyanAccent;
-            if (m.estado == 'Traslado') stateColor = AppColors.accentPurple;
+            Color stateColor = const Color(0xFF94A3B8);
+            if (m.estado == 'Disponible') stateColor = const Color(0xFF10B981);
+            if (m.estado == 'Despachado') stateColor = const Color(0xFFFF9800);
+            if (m.estado == 'En sitio') stateColor = const Color(0xFF06B6D4);
+            if (m.estado == 'Traslado') stateColor = const Color(0xFFA855F7);
+
+            final tooltipMsg = [
+              '${m.nombre} • ${m.estado}',
+              if (m.patente != null && m.patente!.trim().isNotEmpty) 'Patente: ${m.patente}',
+              if (m.usuarioActivo != null) 'Operador: ${m.usuarioActivo}',
+            ].join('\n');
 
             children.add(
               Positioned(
-                left: pos.dx - 15,
-                top: pos.dy - 15,
+                left: pos.dx - 16,
+                top: pos.dy - 16,
                 child: Tooltip(
-                  message: '${m.nombre}\nEstado: ${m.estado}',
+                  message: tooltipMsg,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: stateColor, width: 2.5),
-                        boxShadow: [
-                          BoxShadow(
-                            color: stateColor.withValues(alpha: 0.35),
-                            blurRadius: 6,
-                            spreadRadius: 1,
-                          )
-                        ],
+                    child: GestureDetector(
+                      onTap: () => onSelectMovil?.call(m),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: stateColor, width: 2.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: stateColor.withValues(alpha: 0.45),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            )
+                          ],
+                        ),
+                        child: Icon(Icons.airport_shuttle_rounded, size: 16, color: stateColor),
                       ),
-                      child: Icon(Icons.medical_services_rounded, size: 14, color: stateColor),
                     ),
                   ),
                 ),
@@ -3246,16 +3938,16 @@ class _MovilCardItemState extends State<_MovilCardItem> {
   Color _getStatusColor(String estado) {
     switch (estado) {
       case 'Disponible':
-        return AppColors.accentGreen;
+        return const Color(0xFF10B981);
       case 'Despachado':
-        return AppColors.accentBlue;
+        return const Color(0xFFFF9800);
       case 'En sitio':
-        return Colors.cyanAccent;
+        return const Color(0xFF06B6D4);
       case 'Traslado':
-        return AppColors.accentPurple;
+        return const Color(0xFFA855F7);
       case 'Inactivo':
       case 'Mantenimiento':
-        return AppColors.accentRed;
+        return const Color(0xFFEF4444);
       default:
         return Colors.grey;
     }
@@ -4409,3 +5101,35 @@ class _UnidadCardSkeletonState extends State<_UnidadCardSkeleton> with SingleTic
     );
   }
 }
+
+class _TrianglePointerPainter extends CustomPainter {
+  final Color color;
+  final bool pointingDown;
+
+  _TrianglePointerPainter({required this.color, required this.pointingDown});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    if (pointingDown) {
+      path.moveTo(0, 0);
+      path.lineTo(size.width, 0);
+      path.lineTo(size.width / 2, size.height);
+    } else {
+      path.moveTo(0, size.height);
+      path.lineTo(size.width, size.height);
+      path.lineTo(size.width / 2, 0);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrianglePointerPainter oldDelegate) =>
+      color != oldDelegate.color || pointingDown != oldDelegate.pointingDown;
+}
+

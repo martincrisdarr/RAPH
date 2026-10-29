@@ -9,7 +9,6 @@ import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
 import '../../../shared/services/socket_service.dart';
-import 'victima_sintomas_section.dart';
 
 class DatosVictimasSection extends StatefulWidget {
   final VoidCallback? onDespacho;
@@ -23,7 +22,6 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
   final _ingresoController = IngresoController();
   late TabController _victimasTabController;
   int _lastVictimasCount = 0;
-  Timer? _unlockVictimaDebounce;
 
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvailable = false;
@@ -252,7 +250,6 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   @override
   void dispose() {
-    _unlockVictimaDebounce?.cancel();
     _ingresoController.removeListener(_onControllerUpdate);
     _victimasTabController.dispose();
     if (_dniControllers != null) {
@@ -372,21 +369,19 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
     return Focus(
       onFocusChange: (hasFocus) {
-        if (!isCollaborative) return;
-        if (isLocked) return;
+        if (!isCollaborative || isLocked) return;
         if (hasFocus) {
-          _unlockVictimaDebounce?.cancel();
-          SocketService().lockField('victima_$index');
+          _ingresoController.lockVictima(index);
         } else {
-          _unlockVictimaDebounce?.cancel();
-          _unlockVictimaDebounce = Timer(const Duration(milliseconds: 150), () {
-            if (mounted) {
-              SocketService().unlockField('victima_$index');
-            }
-          });
+          _ingresoController.scheduleUnlockVictima(index);
         }
       },
-      child: Stack(
+      child: Listener(
+        onPointerDown: (_) {
+          if (!isCollaborative || isLocked) return;
+          _ingresoController.lockVictima(index);
+        },
+        child: Stack(
         children: [
           AbsorbPointer(
             absorbing: isLocked,
@@ -532,17 +527,7 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                     const SizedBox(height: 20),
                     const Divider(color: Colors.white10),
                     const SizedBox(height: 12),
- 
-                    // Symptoms & Suggested assistance section
-                    VictimaSintomasSection(
-                      key: ValueKey('sintomas_${victima.id}'),
-                      index: index,
-                      victima: victima,
-                    ),
-                    const SizedBox(height: 20),
-                    const Divider(color: Colors.white10),
-                    const SizedBox(height: 12),
- 
+
                     // Attachments section
                     Align(
                       alignment: Alignment.centerLeft,
@@ -609,9 +594,10 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
             ),
           ),
         ),
-        ],
-      ),
-    );
+      ],
+    ),
+  ),
+);
   }
 
   Widget _buildTriageBanner(ThemeData theme, int index, VictimaData victima) {

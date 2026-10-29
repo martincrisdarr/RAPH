@@ -110,8 +110,70 @@ class DespachoController extends ChangeNotifier {
         _estadosMovil = await MovilEstadoService.obtenerEstados();
       }
       final remoteMoviles = await MovilService.obtenerMoviles();
+      final gpsActivos = await MovilService.obtenerMovilesActivosGps();
+
       if (remoteMoviles.isNotEmpty) {
-        _moviles = remoteMoviles;
+        // Mapear coordenadas GPS reales desde ser_sien_dsp_movil_activo (activo == 1)
+        final Map<String, Map<String, dynamic>> gpsMap = {};
+        for (var g in gpsActivos) {
+          final idM = g['idmovil']?.toString();
+          final act = g['activo'];
+          final isAct = act == 1 || act == '1' || act == true;
+          if (idM != null && isAct) {
+            gpsMap[idM] = g;
+          }
+        }
+
+        final List<Movil> movilesActualizados = [];
+        for (var m in remoteMoviles) {
+          final cleanMId = m.id.replaceAll(RegExp(r'[^0-9]'), '');
+          final gpsData = gpsMap[m.id] ?? (cleanMId.isNotEmpty ? gpsMap[cleanMId] : null);
+
+          if (gpsData != null) {
+            final lat = double.tryParse(gpsData['latitud']?.toString() ?? '');
+            final lng = double.tryParse(gpsData['longitud']?.toString() ?? '');
+            if (lat != null && lng != null) {
+              movilesActualizados.add(m.copyWith(
+                latitud: lat,
+                longitud: lng,
+                tieneGpsActivo: true,
+                usuarioActivo: gpsData['user']?.toString(),
+              ));
+              continue;
+            }
+          }
+          movilesActualizados.add(m.copyWith(
+            tieneGpsActivo: false,
+          ));
+        }
+
+        // Agregar registros que tengan activo 1 en ser_sien_dsp_movil_activo pero no estén en remoteMoviles
+        for (var g in gpsActivos) {
+          final idM = g['idmovil']?.toString();
+          final act = g['activo'];
+          final isAct = act == 1 || act == '1' || act == true;
+          if (idM != null && isAct) {
+            final exists = movilesActualizados.any((m) {
+              final clean = m.id.replaceAll(RegExp(r'[^0-9]'), '');
+              return m.id == idM || (clean.isNotEmpty && clean == idM);
+            });
+            if (!exists) {
+              final lat = double.tryParse(g['latitud']?.toString() ?? '') ?? -38.9516;
+              final lng = double.tryParse(g['longitud']?.toString() ?? '') ?? -68.0591;
+              movilesActualizados.add(Movil(
+                id: idM,
+                nombre: 'Móvil $idM',
+                estado: 'Disponible',
+                latitud: lat,
+                longitud: lng,
+                tieneGpsActivo: true,
+                usuarioActivo: g['user']?.toString(),
+              ));
+            }
+          }
+        }
+
+        _moviles = movilesActualizados;
         _sincronizarAsignacionesMovilUnidad();
         _guardarMoviles();
       }
@@ -358,6 +420,7 @@ class DespachoController extends ChangeNotifier {
 
               if (mIndex != -1) {
                 final m = _moviles[mIndex];
+                final idInc = inc.idIncidente ?? demanda.idDemandaRecibida;
                 if (m.estado == 'Disponible') {
                   double offsetLat = 0.002;
                   double offsetLng = 0.002;
@@ -367,9 +430,13 @@ class DespachoController extends ChangeNotifier {
                   _moviles[mIndex] = m.copyWith(
                     estado: 'Despachado',
                     idmovilEstado: getIdEstadoPorNombre('Despachado'),
-                    idIncidenteActivo: inc.idIncidente ?? demanda.idDemandaRecibida,
-                    latitud: destLat,
-                    longitud: destLng,
+                    idIncidenteActivo: idInc,
+                    latitud: m.tieneGpsActivo ? m.latitud : destLat,
+                    longitud: m.tieneGpsActivo ? m.longitud : destLng,
+                  );
+                } else if (m.idIncidenteActivo == null) {
+                  _moviles[mIndex] = m.copyWith(
+                    idIncidenteActivo: idInc,
                   );
                 }
               }
@@ -378,10 +445,8 @@ class DespachoController extends ChangeNotifier {
         }
       }
       _ordenarMoviles();
-      notifyListeners();
     } catch (e) {
       print('[DespachoController] Error al obtener incidentes del backend: $e');
-      notifyListeners();
     } finally {
       _isIncidentesLoading = false;
       notifyListeners();
@@ -680,8 +745,8 @@ class DespachoController extends ChangeNotifier {
         estado: 'Despachado',
         idmovilEstado: idEstadoDespachado,
         idIncidenteActivo: idIncidente,
-        latitud: destLat,
-        longitud: destLng,
+        latitud: _moviles[mIndex].tieneGpsActivo ? _moviles[mIndex].latitud : destLat,
+        longitud: _moviles[mIndex].tieneGpsActivo ? _moviles[mIndex].longitud : destLng,
       );
 
       _moviles[mIndex] = movilActualizado;
@@ -692,16 +757,17 @@ class DespachoController extends ChangeNotifier {
         print('[DespachoController] Error al sincronizar despacho con backend: $e');
       }
 
-      // 4. Crear registro en la tabla ser_sien_dsp_despacho enviando el idmovil en el campo idmovilunidad
+      // 4. Crear registro en la tabla ser_sien_dsp_despacho enviando el idmovilunidad
       final cleanIdMovil = movilActualizado.id.replaceAll(RegExp(r'[^0-9]'), '');
       final idMovilInt = cleanIdMovil.isNotEmpty ? int.tryParse(cleanIdMovil) : null;
+      final idUnidadFinal = movilActualizado.idMovilUnidad ?? idMovilInt;
 
-      if (idMovilInt != null) {
+      if (idUnidadFinal != null) {
         try {
           final res = await DespachoService.registrarDespacho(
             idVictima: idVictima,
             idIncidente: idIncidente,
-            idMovilUnidad: idMovilInt,
+            idMovilUnidad: idUnidadFinal,
             observacion: 'Despacho asignado desde RAPH Web para víctima #$idVictima',
           );
           if (res != null && res['iddespacho'] != null) {
@@ -747,8 +813,8 @@ class DespachoController extends ChangeNotifier {
         estado: 'Despachado',
         idmovilEstado: idEstadoDespachado,
         idIncidenteActivo: idIncidente,
-        latitud: destLat,
-        longitud: destLng,
+        latitud: _moviles[mIndex].tieneGpsActivo ? _moviles[mIndex].latitud : destLat,
+        longitud: _moviles[mIndex].tieneGpsActivo ? _moviles[mIndex].longitud : destLng,
       );
 
       _moviles[mIndex] = movilActualizado;
@@ -761,12 +827,13 @@ class DespachoController extends ChangeNotifier {
 
       final cleanIdMovil = movilActualizado.id.replaceAll(RegExp(r'[^0-9]'), '');
       final idMovilInt = cleanIdMovil.isNotEmpty ? int.tryParse(cleanIdMovil) : null;
+      final idUnidadFinal = movilActualizado.idMovilUnidad ?? idMovilInt;
 
-      if (idMovilInt != null) {
+      if (idUnidadFinal != null) {
         try {
           await DespachoService.registrarDespacho(
             idIncidente: idIncidente,
-            idMovilUnidad: idMovilInt,
+            idMovilUnidad: idUnidadFinal,
             observacion: 'Despacho Rápido emitido desde pantalla Despachos',
           );
         } catch (e) {

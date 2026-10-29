@@ -18,6 +18,8 @@ class Incidente {
   final int? activo;
   final List<Victima>? victimas;
   final List<Novedad>? novedades;
+  final List<dynamic>? despachos;
+  final Map<String, dynamic>? ultimoEstadoRel;
 
   Incidente({
     this.idIncidente,
@@ -35,6 +37,8 @@ class Incidente {
     this.activo = 1,
     this.victimas,
     this.novedades,
+    this.despachos,
+    this.ultimoEstadoRel,
   });
 
   factory Incidente.fromJson(Map<String, dynamic> json) {
@@ -70,6 +74,10 @@ class Incidente {
       activo: json['activo'] != null ? int.tryParse(json['activo'].toString()) : 1,
       victimas: json['victimas'] != null ? (json['victimas'] as List).map((v) => Victima.fromJson(v)).toList() : null,
       novedades: json['novedades'] != null ? (json['novedades'] as List).map((n) => Novedad.fromJson(n)).toList() : null,
+      despachos: json['despachos'] is List ? json['despachos'] : null,
+      ultimoEstadoRel: json['ultimoEstadoRel'] is Map<String, dynamic>
+          ? json['ultimoEstadoRel']
+          : (json['ultimo_estado_rel'] is Map<String, dynamic> ? json['ultimo_estado_rel'] : null),
     );
   }
 
@@ -106,6 +114,8 @@ class Incidente {
     if (activo != null) map['activo'] = activo;
     if (victimas != null) map['victimas'] = victimas?.map((v) => v.toJson()).toList();
     if (novedades != null) map['novedades'] = novedades?.map((n) => n.toJson()).toList();
+    if (despachos != null) map['despachos'] = despachos;
+    if (ultimoEstadoRel != null) map['ultimoEstadoRel'] = ultimoEstadoRel;
     return map;
   }
 
@@ -127,6 +137,8 @@ class Incidente {
     int? activo,
     List<Victima>? victimas,
     List<Novedad>? novedades,
+    List<dynamic>? despachos,
+    Map<String, dynamic>? ultimoEstadoRel,
   }) {
     return Incidente(
       idIncidente: idIncidente ?? this.idIncidente,
@@ -144,6 +156,8 @@ class Incidente {
       activo: activo ?? this.activo,
       victimas: victimas ?? this.victimas,
       novedades: novedades ?? this.novedades,
+      despachos: despachos ?? this.despachos,
+      ultimoEstadoRel: ultimoEstadoRel ?? this.ultimoEstadoRel,
     );
   }
 }

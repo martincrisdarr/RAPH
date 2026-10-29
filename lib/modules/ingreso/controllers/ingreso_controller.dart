@@ -10,6 +10,8 @@ import '../../../shared/models/victima_data.dart';
 import '../../../shared/services/victima_service.dart';
 import '../../../shared/services/socket_service.dart';
 import '../../../shared/services/configuracion_service.dart';
+import '../../../shared/services/despacho_service.dart';
+import '../../despacho/controllers/despacho_controller.dart';
 
 class IngresoController extends ChangeNotifier {
   static final IngresoController _instance = IngresoController._internal();
@@ -23,6 +25,17 @@ class IngresoController extends ChangeNotifier {
 
   Incidente _incidenteActual = Incidente(idLocalidad: 580056);
   Incidente get incidenteActual => _incidenteActual;
+
+  int _pasoIncidente = 0;
+  int get pasoIncidente => _pasoIncidente;
+
+  List<Map<String, dynamic>> _despachosActivos = [];
+  List<Map<String, dynamic>> get despachosActivos => _despachosActivos;
+
+  void setPasoIncidente(int paso) {
+    _pasoIncidente = paso.clamp(0, 5);
+    notifyListeners();
+  }
 
   bool _tieneBorrador = false;
 
@@ -58,6 +71,7 @@ class IngresoController extends ChangeNotifier {
   }
 
   void _limpiarOyentesSocketVictimas() {
+    releaseVictimaLock();
     _registeredCallbacks.forEach((fieldId, callback) {
       SocketService().unregisterFieldListener(fieldId, callback);
     });
@@ -238,6 +252,10 @@ class IngresoController extends ChangeNotifier {
         protocolosSeleccionados.isNotEmpty;
     
     _asegurarTriageRojoVictimas();
+    if (_incidenteActual.idIncidente != null) {
+      _cargarDatosDiferidosIncidente(_incidenteActual.idIncidente!);
+    }
+    actualizarPasoIncidente();
     notifyListeners();
   }
 
@@ -292,6 +310,8 @@ class IngresoController extends ChangeNotifier {
     _llamadasDelIncidente = [];
     _tieneBorrador = false;
     _vistaFormulario = true;
+    _pasoIncidente = 0;
+    _despachosActivos.clear();
     _sincronizarSocketRoom();
     notifyListeners();
   }
@@ -583,8 +603,49 @@ class IngresoController extends ChangeNotifier {
   int get selectedVictimaIndex => _selectedVictimaIndex;
   set selectedVictimaIndex(int value) {
     if (value >= 0 && value < _victimas.length) {
+      if (_selectedVictimaIndex != value) {
+        releaseVictimaLock();
+      }
       _selectedVictimaIndex = value;
       notifyListeners();
+    }
+  }
+
+  Timer? _victimLockDebounce;
+  int? _activeLockedVictimaIndex;
+
+  void lockVictima(int index) {
+    if (_incidenteActual.idIncidente == null) return;
+    _victimLockDebounce?.cancel();
+    if (_activeLockedVictimaIndex != index) {
+      if (_activeLockedVictimaIndex != null) {
+        SocketService().unlockField('victima_$_activeLockedVictimaIndex');
+      }
+      _activeLockedVictimaIndex = index;
+      SocketService().lockField('victima_$index');
+    }
+  }
+
+  void scheduleUnlockVictima(int index, {Duration delay = const Duration(seconds: 2)}) {
+    if (_incidenteActual.idIncidente == null) return;
+    _victimLockDebounce?.cancel();
+    _victimLockDebounce = Timer(delay, () {
+      if (_activeLockedVictimaIndex == index) {
+        SocketService().unlockField('victima_$index');
+        _activeLockedVictimaIndex = null;
+      }
+    });
+  }
+
+  void cancelUnlockVictima() {
+    _victimLockDebounce?.cancel();
+  }
+
+  void releaseVictimaLock() {
+    _victimLockDebounce?.cancel();
+    if (_activeLockedVictimaIndex != null) {
+      SocketService().unlockField('victima_$_activeLockedVictimaIndex');
+      _activeLockedVictimaIndex = null;
     }
   }
 
@@ -789,6 +850,9 @@ class IngresoController extends ChangeNotifier {
     _guardarBorrador();
     notifyListeners();
 
+    // Sincronizar el paso del incidente inmediatamente (utilizando hint de la llamada/Kanban)
+    actualizarPasoIncidente(rawMapHint: rawMap);
+
     // Carga diferida (Lazy loading) de los datos profundos del incidente (víctimas, novedades, despachos) en segundo plano
     if (idIncidente != null) {
       _cargarDatosDiferidosIncidente(idIncidente);
@@ -812,6 +876,9 @@ class IngresoController extends ChangeNotifier {
       _llamadasDelIncidente = llamadas;
       await _guardarBorrador();
       notifyListeners();
+
+      // Refrescar el paso con los datos profundos (despachos de víctimas)
+      await actualizarPasoIncidente();
     } catch (e) {
       debugPrint('[IngresoController] Error en carga diferida de incidente: $e');
     }
@@ -838,6 +905,9 @@ class IngresoController extends ChangeNotifier {
     _guardarBorrador();
     notifyListeners();
 
+    // Sincronizar paso inicial según demanda
+    actualizarPasoIncidente();
+
     // Carga diferida (Lazy loading) de los datos profundos del incidente por ID
     final idDemanda = demanda.idDemandaRecibida;
     final idIncidente = demanda.incidente?.idIncidente ?? demanda.idIncidente;
@@ -859,6 +929,7 @@ class IngresoController extends ChangeNotifier {
         }
         _guardarBorrador();
         notifyListeners();
+        await actualizarPasoIncidente();
       }
     }
   }
@@ -891,5 +962,164 @@ class IngresoController extends ChangeNotifier {
     _sincronizarSocketRoom();
     _guardarBorrador();
     notifyListeners();
+    actualizarPasoIncidente();
+  }
+
+  bool _isActualizandoPaso = false;
+
+  /// Calcula y actualiza el paso del incidente (0: Incidente, 1: Despacho, 2: En sitio, 3: Traslado, 4: Fin, 5: Cierre)
+  Future<void> actualizarPasoIncidente({Map<String, dynamic>? rawMapHint}) async {
+    if (_isActualizandoPaso) return;
+    _isActualizandoPaso = true;
+    try {
+      final idIncidente = _incidenteActual.idIncidente ?? _demandaActual.idIncidente;
+
+      int pasoCalculado = 0;
+
+    // Si el incidente está cerrado
+    if (_incidenteActual.activo == 0 ||
+        _demandaActual.idCfgEstado == 7 ||
+        _demandaActual.idCfgEstado == 8) {
+      pasoCalculado = _demandaActual.idCfgEstado == 8 ? 4 : 5;
+    }
+
+    final List<String> estadosDetectados = [];
+
+    // 1. Detección rápida desde rawMapHint (útil al navegar desde Listados / Kanban)
+    if (rawMapHint != null) {
+      if (rawMapHint['moviles'] is List) {
+        for (var m in (rawMapHint['moviles'] as List)) {
+          if (m is Map && m['status'] != null) {
+            estadosDetectados.add(m['status'].toString());
+          }
+        }
+      }
+      final incHint = rawMapHint['incidente'] is Map ? rawMapHint['incidente'] : rawMapHint;
+      if (incHint is Map && incHint['victimas'] is List) {
+        for (var v in (incHint['victimas'] as List)) {
+          if (v is Map && v['despachos'] is List) {
+            for (var d in (v['despachos'] as List)) {
+              if (d is Map && (d['activo'] == 1 || d['activo'] == '1' || d['activo'] == true)) {
+                estadosDetectados.add('Despachado');
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Detección desde los móviles en memoria de DespachoController
+    try {
+      final despController = DespachoController();
+      if (idIncidente != null) {
+        final movilesAsignados = despController.moviles.where((m) =>
+          m.idIncidenteActivo == idIncidente ||
+          (m.idIncidenteActivo != null && m.idIncidenteActivo.toString() == idIncidente.toString())
+        ).toList();
+
+        for (var m in movilesAsignados) {
+          estadosDetectados.add(m.estado);
+        }
+      }
+    } catch (_) {}
+
+    // 3. Detección desde las víctimas del incidente actual
+    if (_incidenteActual.victimas != null) {
+      for (var vic in _incidenteActual.victimas!) {
+        if (vic.idMovilAsignado != null && vic.idMovilAsignado!.trim().isNotEmpty) {
+          estadosDetectados.add('Despachado');
+        }
+        if (vic.idDespacho != null) {
+          estadosDetectados.add('Despachado');
+        }
+      }
+    }
+
+    // 4. Detección directa desde los despachos expandidos del incidente
+    if (_incidenteActual.despachos != null && _incidenteActual.despachos!.isNotEmpty) {
+      for (var d in _incidenteActual.despachos!) {
+        if (d is Map) {
+          final act = d['activo'];
+          // Solo despachos activos (activo == 1), ignorar cancelados (activo == 2)
+          if (act == 1 || act == '1' || act == true) {
+            estadosDetectados.add('Despachado');
+            if (d['movilunidad'] is Map && d['movilunidad']['movil'] is Map) {
+              final mData = d['movilunidad']['movil'];
+              if (mData['estado'] != null) {
+                estadosDetectados.add(mData['estado'].toString());
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Detección desde último estado del incidente si existe
+    if (_incidenteActual.ultimoEstadoRel != null) {
+      final uRel = _incidenteActual.ultimoEstadoRel!;
+      final estRel = uRel['estadoRel'] ?? uRel['estado_rel'];
+      if (estRel is Map && estRel['descripcion'] != null) {
+        estadosDetectados.add(estRel['descripcion'].toString());
+      }
+    }
+
+    // 6. Demanda en estado 6 (Despachado)
+    if (_demandaActual.idCfgEstado == 6) {
+      estadosDetectados.add('Despachado');
+    }
+
+    pasoCalculado = _calcularPasoDesdeEstados(estadosDetectados, pasoCalculado);
+    _pasoIncidente = pasoCalculado;
+    notifyListeners();
+
+    // 5. Consulta asíncrona de despachos en backend en tiempo real
+    if (idIncidente != null) {
+      try {
+        final despachosBackend = await DespachoService.obtenerPorIncidente(idIncidente);
+        _despachosActivos = despachosBackend;
+
+        if (despachosBackend.isNotEmpty) {
+          for (var d in despachosBackend) {
+            estadosDetectados.add('Despachado');
+            if (d['movilunidad'] is Map && d['movilunidad']['movil'] is Map) {
+              final mData = d['movilunidad']['movil'];
+              if (mData['estado'] != null) {
+                estadosDetectados.add(mData['estado'].toString());
+              }
+            }
+          }
+          final nuevoPaso = _calcularPasoDesdeEstados(estadosDetectados, _pasoIncidente);
+          if (nuevoPaso != _pasoIncidente) {
+            _pasoIncidente = nuevoPaso;
+            notifyListeners();
+          }
+        }
+      } catch (e) {
+        debugPrint('[IngresoController] Error al verificar despachos del incidente: $e');
+      }
+    }
+    } finally {
+      _isActualizandoPaso = false;
+    }
+  }
+
+  int _calcularPasoDesdeEstados(List<String> estados, int pasoBase) {
+    int maxPaso = pasoBase;
+
+    for (var est in estados) {
+      final e = est.trim().toLowerCase();
+      if (e == 'cierre' || e == 'cerrado') {
+        if (maxPaso < 5) maxPaso = 5;
+      } else if (e == 'fin' || e == 'finalizado' || e == 'arribado' || e == 'arribado destino' || e == 'base') {
+        if (maxPaso < 4) maxPaso = 4;
+      } else if (e == 'traslado' || e == 'en traslado' || e == 'en_traslado') {
+        if (maxPaso < 3) maxPaso = 3;
+      } else if (e == 'en sitio' || e == 'en_sitio' || e == 'en escena' || e == 'arribado escena' || e == 'arribado_escena') {
+        if (maxPaso < 2) maxPaso = 2;
+      } else if (e == 'despachado' || e == 'despacho' || e == 'en camino' || e == 'en_camino' || e == 'en transito' || e == 'asignado') {
+        if (maxPaso < 1) maxPaso = 1;
+      }
+    }
+    return maxPaso;
   }
 }

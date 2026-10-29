@@ -130,7 +130,7 @@ class DemandaRecibidaService {
 
   static Future<DemandaRecibida?> obtenerPorIncidente(int idIncidente) async {
     try {
-      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades';
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades,incidente.despachos.movilunidad.movil';
       final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {
@@ -148,7 +148,7 @@ class DemandaRecibidaService {
 
   static Future<List<DemandaRecibida>> obtenerTodasPorIncidente(int idIncidente) async {
     try {
-      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades';
+      final urlStr = '$_baseUrl?filter%5Bidincidente%5D=$idIncidente&expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades,incidente.despachos.movilunidad.movil';
       final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {
@@ -164,7 +164,7 @@ class DemandaRecibidaService {
 
   static Future<DemandaRecibida?> obtenerPorId(int idDemandaRecibida) async {
     try {
-      final urlStr = '$_baseUrl/$idDemandaRecibida?expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades';
+      final urlStr = '$_baseUrl/$idDemandaRecibida?expand=estado,tipo_ingreso,incidente,incidente.victimas.persona,incidente.victimas.persona_sin_dni,incidente.victimas.despachos.movilunidad,incidente.novedades,incidente.despachos.movilunidad.movil';
       final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {

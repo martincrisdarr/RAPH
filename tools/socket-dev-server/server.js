@@ -107,13 +107,15 @@ io.on('connection', (socket) => {
     const field = data.field;
 
     if (roomLocks[currentRoom] && roomLocks[currentRoom][field]) {
-      delete roomLocks[currentRoom][field];
+      const lockHolder = roomLocks[currentRoom][field];
+      if (lockHolder.id === socket.id) {
+        delete roomLocks[currentRoom][field];
+        console.log(`[Socket.IO] Campo desbloqueado: "${field}" en ${currentRoom} por ${socket.userName} (${socket.id})`);
+        socket.to(currentRoom).emit('field:unlocked', { field });
+      } else {
+        console.log(`[Socket.IO] Ignorado intento de desbloquear "${field}" en ${currentRoom} por ${socket.userName} (${socket.id}). Pertenece a ${lockHolder.nombre} (${lockHolder.id})`);
+      }
     }
-
-    console.log(`[Socket.IO] Campo desbloqueado: "${field}" en ${currentRoom}`);
-
-    // Notificar a los demas en la sala
-    socket.to(currentRoom).emit('field:unlocked', { field });
   });
 
   // 4. Actualizar campo colaborativo (texto, accion o novedad)

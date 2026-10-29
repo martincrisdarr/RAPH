@@ -12,6 +12,9 @@ class Movil {
   final double latitud;
   final double longitud;
   final int? idIncidenteActivo; // ID of active incident they are assigned to
+  final int? idMovilUnidad; // ID in ser_sien_dsp_movil_unidad
+  final bool tieneGpsActivo; // Si tiene tracking GPS activo en ser_sien_dsp_movil_activo
+  final String? usuarioActivo; // Usuario con sesión activa en la unidad
 
   Movil({
     required this.id,
@@ -27,6 +30,9 @@ class Movil {
     required this.latitud,
     required this.longitud,
     this.idIncidenteActivo,
+    this.idMovilUnidad,
+    this.tieneGpsActivo = false,
+    this.usuarioActivo,
   });
 
   factory Movil.fromJson(Map<String, dynamic> json) {
@@ -58,6 +64,16 @@ class Movil {
     }
 
     int? parsedIdEstado = json['idmovil_estado'] != null ? int.tryParse(json['idmovil_estado'].toString()) : null;
+    int? parsedIdMovilUnidad = json['idmovilunidad'] != null ? int.tryParse(json['idmovilunidad'].toString()) : null;
+    if (parsedIdMovilUnidad == null && json['unidades'] is List && (json['unidades'] as List).isNotEmpty) {
+      final primeraUnidadActiva = (json['unidades'] as List).firstWhere(
+        (u) => u is Map && (u['activo'] == 1 || u['activo'] == '1' || u['activo'] == true),
+        orElse: () => null,
+      );
+      if (primeraUnidadActiva is Map && primeraUnidadActiva['idmovilunidad'] != null) {
+        parsedIdMovilUnidad = int.tryParse(primeraUnidadActiva['idmovilunidad'].toString());
+      }
+    }
 
     return Movil(
       id: (json['idmovil'] ?? json['id'] ?? '').toString(),
@@ -77,6 +93,9 @@ class Movil {
       idIncidenteActivo: json['idIncidenteActivo'] != null
           ? int.tryParse(json['idIncidenteActivo'].toString())
           : null,
+      idMovilUnidad: parsedIdMovilUnidad,
+      tieneGpsActivo: json['tieneGpsActivo'] == true || json['gps_activo'] == 1,
+      usuarioActivo: json['usuarioActivo']?.toString() ?? json['user']?.toString(),
     );
   }
 
@@ -96,6 +115,9 @@ class Movil {
       'latitud': latitud,
       'longitud': longitud,
       'idIncidenteActivo': idIncidenteActivo,
+      'idmovilunidad': idMovilUnidad,
+      'tieneGpsActivo': tieneGpsActivo,
+      'usuarioActivo': usuarioActivo,
     };
   }
 
@@ -113,6 +135,9 @@ class Movil {
     double? latitud,
     double? longitud,
     int? idIncidenteActivo,
+    int? idMovilUnidad,
+    bool? tieneGpsActivo,
+    String? usuarioActivo,
     bool clearIncidente = false,
     bool clearUnidad = false,
   }) {
@@ -130,6 +155,9 @@ class Movil {
       latitud: latitud ?? this.latitud,
       longitud: longitud ?? this.longitud,
       idIncidenteActivo: clearIncidente ? null : (idIncidenteActivo ?? this.idIncidenteActivo),
+      idMovilUnidad: idMovilUnidad ?? this.idMovilUnidad,
+      tieneGpsActivo: tieneGpsActivo ?? this.tieneGpsActivo,
+      usuarioActivo: usuarioActivo ?? this.usuarioActivo,
     );
   }
 }
