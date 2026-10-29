@@ -141,21 +141,21 @@ class _SintomaSearchPanelState extends State<SintomaSearchPanel> {
             ),
           )
         else
-          Container(
-            constraints: const BoxConstraints(maxHeight: 460),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.02),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: ListView.separated(
-                shrinkWrap: true,
-                padding: const EdgeInsets.all(8),
-                itemCount: filteredSintomas.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 6),
-                itemBuilder: (context, index) {
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: ListView.separated(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.all(8),
+                  itemCount: filteredSintomas.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
                   final sintoma = filteredSintomas[index];
                   final isSelected = widget.sintomaSeleccionado?.id == sintoma.id;
                   final seriesColor = _getColorForSeries(sintoma.codigoColor);
@@ -224,6 +224,7 @@ class _SintomaSearchPanelState extends State<SintomaSearchPanel> {
               ),
             ),
           ),
+        ),
       ],
     );
   }

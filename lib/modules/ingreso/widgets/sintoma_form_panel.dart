@@ -138,23 +138,46 @@ class _SintomaFormPanelState extends State<SintomaFormPanel> {
       widget.formulario?.codigoColor ?? widget.sintomaSeleccionado!.codigoColor,
     );
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Cabecera con Ficha Activa y Mini Stepper del Wizard
-          _buildWizardHeader(theme, seriesColor),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hasBoundedHeight = constraints.maxHeight.isFinite;
 
-          // 2. Contenido dinámico según el paso actual
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: _currentStep == 0
-                ? _buildStep1Preguntas(theme, seriesColor)
-                : _buildStep2CategorizacionYMedios(theme, seriesColor),
-          ),
-        ],
-      ),
+        final bodyContent = Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: _currentStep == 0
+              ? _buildStep2CategorizacionYMedios(theme, seriesColor)
+              : _buildStep1Preguntas(theme, seriesColor),
+        );
+
+        if (hasBoundedHeight) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Cabecera Fija con Ficha Activa y Mini Stepper
+              _buildWizardHeader(theme, seriesColor),
+
+              // 2. Contenido dinámico con scroll independiente
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: bodyContent,
+                ),
+              ),
+            ],
+          );
+        } else {
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildWizardHeader(theme, seriesColor),
+                bodyContent,
+              ],
+            ),
+          );
+        }
+      },
     );
   }
 
@@ -221,28 +244,28 @@ class _SintomaFormPanelState extends State<SintomaFormPanel> {
           ),
           const SizedBox(height: 12),
 
-          // Pestañas del Stepper (Paso 1 vs Paso 2)
+          // Pestañas del Stepper (Paso 0: Triage y Pre-arribo vs Paso 1: Interrogatorio)
           Row(
             children: [
               Expanded(
                 child: _buildStepTab(
                   stepIndex: 0,
-                  icon: Icons.contact_support_rounded,
-                  title: '1. PREGUNTAS',
-                  subtitle: 'Screening al llamante',
+                  icon: Icons.local_shipping_rounded,
+                  title: '1. TRIAGE Y PRE-ARRIBO',
+                  subtitle: 'Categorización y soporte vital',
                   isActive: _currentStep == 0,
-                  activeColor: theme.colorScheme.primary,
+                  activeColor: seriesColor,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _buildStepTab(
                   stepIndex: 1,
-                  icon: Icons.local_shipping_rounded,
-                  title: '2. CATEGORIZACIÓN Y MEDIOS',
-                  subtitle: 'Triage y soporte vital',
+                  icon: Icons.contact_support_rounded,
+                  title: '2. INTERROGATORIO',
+                  subtitle: 'Preguntas de la ficha',
                   isActive: _currentStep == 1,
-                  activeColor: seriesColor,
+                  activeColor: theme.colorScheme.primary,
                 ),
               ),
             ],
@@ -388,16 +411,16 @@ class _SintomaFormPanelState extends State<SintomaFormPanel> {
 
         const SizedBox(height: 16),
 
-        // Botón destacado para avanzar al Paso 2
+        // Botón para volver a Triage y Pre-arribo
         ElevatedButton.icon(
           onPressed: () {
             setState(() {
-              _currentStep = 1;
+              _currentStep = 0;
             });
           },
-          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+          icon: const Icon(Icons.arrow_back_rounded, size: 18),
           label: const Text(
-            'CONTINUAR A CATEGORIZACIÓN Y MEDIOS',
+            'VOLVER A TRIAGE Y PRE-ARRIBO',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.6),
           ),
           style: ElevatedButton.styleFrom(
@@ -413,7 +436,7 @@ class _SintomaFormPanelState extends State<SintomaFormPanel> {
   }
 
   /// =========================================================================
-  /// PASO 2: CATEGORIZACIÓN (TRIAGE) Y MEDIOS / INSTRUCCIONES DE PRE-ARRIBO
+  /// PASO 1: CATEGORIZACIÓN (TRIAGE) Y MEDIOS / INSTRUCCIONES DE PRE-ARRIBO
   /// =========================================================================
   Widget _buildStep2CategorizacionYMedios(ThemeData theme, Color seriesColor) {
     final form = widget.formulario;
@@ -422,17 +445,17 @@ class _SintomaFormPanelState extends State<SintomaFormPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Botón superior para volver al interrogatorio
+        // Enlace para ir al interrogatorio clínico
         Align(
-          alignment: Alignment.centerLeft,
+          alignment: Alignment.centerRight,
           child: TextButton.icon(
             onPressed: () {
               setState(() {
-                _currentStep = 0;
+                _currentStep = 1;
               });
             },
-            icon: const Icon(Icons.arrow_back_rounded, size: 16),
-            label: const Text('Volver a Preguntas de Screening'),
+            icon: const Icon(Icons.contact_support_rounded, size: 16),
+            label: const Text('Ver Preguntas de Interrogatorio Clínico ->'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.white70,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

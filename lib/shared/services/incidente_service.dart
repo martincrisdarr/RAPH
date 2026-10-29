@@ -68,7 +68,7 @@ class IncidenteService {
 
   static Future<Incidente?> obtenerPorId(int idIncidente) async {
     try {
-      final urlStr = '$_baseUrl/$idIncidente?expand=ultimoEstadoRel.estadoRel,victimas.persona,victimas.persona_sin_dni,victimas.despachos.movilunidad,novedades';
+      final urlStr = '$_baseUrl/$idIncidente?expand=ultimoEstadoRel.estadoRel,victimas.persona,victimas.persona_sin_dni,victimas.despachos.movilunidad,novedades,despachos.movilunidad.movil';
       final response = await http.get(Uri.parse(urlStr), headers: _getHeaders());
 
       if (response.statusCode == 200) {

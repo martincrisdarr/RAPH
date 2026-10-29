@@ -78,7 +78,7 @@ class DespachoService {
     }
   }
 
-  /// Obtener despachos activos por idincidente (activo == 1 y fechahoracierre null)
+  /// Obtener despachos activos registrados por idincidente (activo == 1)
   static Future<List<Map<String, dynamic>>> obtenerPorIncidente(int idIncidente) async {
     try {
       final response = await http.get(
@@ -91,10 +91,9 @@ class DespachoService {
           return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).where((d) {
             final act = d['activo'];
             final isActivo = act == 1 || act == '1' || act == true;
-            final noCerrado = d['fechahoracierre'] == null || d['fechahoracierre'].toString().trim().isEmpty;
             final incId = d['idincidente'] != null ? int.tryParse(d['idincidente'].toString()) : null;
             final matchesInc = incId == null || incId == idIncidente;
-            return isActivo && noCerrado && matchesInc;
+            return isActivo && matchesInc;
           }).toList();
         }
       }

@@ -125,4 +125,42 @@ class MovilService {
       return false;
     }
   }
+
+  /// Obtiene los móviles con tracking GPS activo desde ser_sien_dsp_movil_activo
+  static Future<List<Map<String, dynamic>>> obtenerMovilesActivosGps() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/ser_sien_dsp_movil_activo/activos'),
+        headers: _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final cleanBody = response.body.replaceFirst('\uFEFF', '').trim();
+        final decoded = json.decode(cleanBody);
+        if (decoded is List && decoded.isNotEmpty) {
+          return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+
+      // Si /activos estuviera vacío, consultar el endpoint base filtrando activo=1
+      final fallbackResponse = await http.get(
+        Uri.parse('$_baseUrl/ser_sien_dsp_movil_activo'),
+        headers: _getHeaders(),
+      );
+      if (fallbackResponse.statusCode == 200) {
+        final cleanBody = fallbackResponse.body.replaceFirst('\uFEFF', '').trim();
+        final decoded = json.decode(cleanBody);
+        if (decoded is List) {
+          return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).where((e) {
+            final act = e['activo'];
+            return (act == 1 || act == '1' || act == true) && e['idmovil'] != null;
+          }).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      print('[MovilService] Error al obtener móviles activos GPS: $e');
+      return [];
+    }
+  }
 }

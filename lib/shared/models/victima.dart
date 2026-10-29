@@ -11,6 +11,7 @@ class Victima {
   final DateTime? fechahoraConfirmaDespacho;
   final String? observaciones;
   final String? idMovilAsignado;
+  final String? nombreMovilAsignado;
   final int? idDespacho;
   final String? reporte;
 
@@ -27,6 +28,7 @@ class Victima {
     this.fechahoraConfirmaDespacho,
     this.observaciones,
     this.idMovilAsignado,
+    this.nombreMovilAsignado,
     this.idDespacho,
     this.reporte,
   });
@@ -56,6 +58,7 @@ class Victima {
 
     int? idDespacho = json['iddespacho'] != null ? int.tryParse(json['iddespacho'].toString()) : null;
     String? idMovilAsignado = json['id_movil_asignado']?.toString();
+    String? nombreMovilAsignado = json['nombre_movil_asignado']?.toString();
     if (json['despachos'] is List) {
       final despachosList = json['despachos'] as List;
       final activos = despachosList.where((d) {
@@ -78,6 +81,16 @@ class Victima {
             idMovilAsignado = despachoActivo['idmovilunidad'].toString();
           }
         }
+        if (nombreMovilAsignado == null || nombreMovilAsignado.isEmpty) {
+          if (despachoActivo['movil'] is Map && despachoActivo['movil']['nombre'] != null) {
+            nombreMovilAsignado = despachoActivo['movil']['nombre'].toString();
+          } else if (despachoActivo['movilunidad'] is Map) {
+            final mu = despachoActivo['movilunidad'];
+            if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+              nombreMovilAsignado = mu['movil']['nombre'].toString();
+            }
+          }
+        }
       }
     }
 
@@ -98,6 +111,7 @@ class Victima {
           : null,
       observaciones: json['observaciones'],
       idMovilAsignado: idMovilAsignado,
+      nombreMovilAsignado: nombreMovilAsignado,
       idDespacho: idDespacho,
       reporte: json['reporte'],
     );
@@ -117,6 +131,7 @@ class Victima {
     if (fechahoraConfirmaDespacho != null) map['fechahora_confirma_despacho'] = fechahoraConfirmaDespacho!.toIso8601String();
     if (observaciones != null) map['observaciones'] = observaciones;
     if (idMovilAsignado != null) map['id_movil_asignado'] = idMovilAsignado;
+    if (nombreMovilAsignado != null) map['nombre_movil_asignado'] = nombreMovilAsignado;
     if (idDespacho != null) map['iddespacho'] = idDespacho;
     if (reporte != null) map['reporte'] = reporte;
     return map;
@@ -136,6 +151,7 @@ class Victima {
     DateTime? fechahoraConfirmaDespacho,
     String? observaciones,
     String? idMovilAsignado,
+    String? nombreMovilAsignado,
     int? idDespacho,
     String? reporte,
     bool clearMovil = false,
@@ -153,6 +169,7 @@ class Victima {
       fechahoraConfirmaDespacho: fechahoraConfirmaDespacho ?? this.fechahoraConfirmaDespacho,
       observaciones: observaciones ?? this.observaciones,
       idMovilAsignado: clearMovil ? null : (idMovilAsignado ?? this.idMovilAsignado),
+      nombreMovilAsignado: clearMovil ? null : (nombreMovilAsignado ?? this.nombreMovilAsignado),
       idDespacho: clearMovil ? null : (idDespacho ?? this.idDespacho),
       reporte: reporte ?? this.reporte,
     );

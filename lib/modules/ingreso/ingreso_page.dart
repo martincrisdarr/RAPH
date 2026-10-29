@@ -9,11 +9,11 @@ import 'widgets/incidente_section.dart';
 import 'widgets/novedades_section.dart';
 import 'widgets/protocolos_panel.dart';
 import 'widgets/datos_victimas_section.dart';
+import 'widgets/victima_sintomas_section.dart';
 import 'widgets/resumen_victimas_section.dart';
 import 'widgets/llamadas_asociadas_section.dart';
 import 'controllers/ingreso_controller.dart';
 import '../despacho/controllers/despacho_controller.dart';
-import '../../shared/models/demanda_recibida.dart';
 import '../../shared/services/incidente_service.dart';
 import '../../shared/services/demanda_recibida_service.dart';
 import '../../shared/services/victima_service.dart';
@@ -28,7 +28,6 @@ class IngresoPage extends StatefulWidget {
 }
 
 class _IngresoPageState extends State<IngresoPage> {
-  int _currentStep = 0;
   bool _isActionPanelOpen = false;
   List<Configuracion> _tiposIngreso = [];
 
@@ -37,6 +36,7 @@ class _IngresoPageState extends State<IngresoPage> {
     super.initState();
     IngresoController().vistaFormulario = true;
     _cargarTiposIngreso();
+    IngresoController().actualizarPasoIncidente();
   }
 
   Future<void> _cargarTiposIngreso() async {
@@ -60,11 +60,8 @@ class _IngresoPageState extends State<IngresoPage> {
   ];
 
   void _iniciarDespachoRapido() {
-    setState(() {
-      _currentStep = 1; // Paso Despacho
-    });
-    
     final controller = IngresoController();
+    controller.setPasoIncidente(1);
     controller.updateDemanda(idCfgEstado: 6);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -91,13 +88,14 @@ class _IngresoPageState extends State<IngresoPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CustomStepper(
-                steps: _steps,
-                currentStep: _currentStep,
-                onStepTapped: (index) {
-                  setState(() {
-                    _currentStep = index;
-                  });
+              ListenableBuilder(
+                listenable: IngresoController(),
+                builder: (context, _) {
+                  final controller = IngresoController();
+                  return CustomStepper(
+                    steps: _steps,
+                    currentStep: controller.pasoIncidente,
+                  );
                 },
               ),
               const SizedBox(height: 24),
@@ -144,15 +142,16 @@ class _IngresoPageState extends State<IngresoPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // 1. Fila Superior: Datos Personales de la Víctima + Resumen
                       SizedBox(
-                        height: 780,
+                        height: 480,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const Expanded(
                               flex: 2,
                               child: IngresoSectionCard(
-                                title: 'VÍCTIMAS',
+                                title: 'DATOS DE LA VÍCTIMA',
                                 child: DatosVictimasSection(),
                               ),
                             ),
@@ -166,6 +165,35 @@ class _IngresoPageState extends State<IngresoPage> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 2. Fila Inferior: Síntomas, Asistencia y Triage de la Víctima Seleccionada
+                      ListenableBuilder(
+                        listenable: IngresoController(),
+                        builder: (context, child) {
+                          final controller = IngresoController();
+                          final victimas = controller.victimas;
+                          if (victimas.isEmpty) return const SizedBox.shrink();
+
+                          final selectedIndex = controller.selectedVictimaIndex.clamp(0, victimas.length - 1);
+                          final victimaActiva = victimas[selectedIndex];
+                          final nombreDisplay = victimaActiva.nombre.trim().isNotEmpty
+                              ? ' (${victimaActiva.nombre.trim()})'
+                              : ' #${selectedIndex + 1}';
+
+                          return SizedBox(
+                            height: 640,
+                            child: IngresoSectionCard(
+                              title: 'SÍNTOMAS Y ASISTENCIA DE VÍCTIMA$nombreDisplay',
+                              child: VictimaSintomasSection(
+                                key: ValueKey('sintomas_sec_${victimaActiva.id}'),
+                                index: selectedIndex,
+                                victima: victimaActiva,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       ListenableBuilder(
                         listenable: IngresoController(),

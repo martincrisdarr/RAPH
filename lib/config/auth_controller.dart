@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:user_session_contract/user_session_contract.dart';
+import '../shared/services/socket_service.dart';
 
 class RaphAuthController extends ChangeNotifier {
   static final instance = RaphAuthController._();
@@ -65,7 +66,10 @@ class RaphAuthController extends ChangeNotifier {
     return null;
   }
 
-  void initialize(IUserSession session, {String? explicitUsername}) {
+  void initialize(IUserSession session, {String? explicitUsername, bool notify = true}) {
+    final prevToken = token;
+    final prevUser = currentUser;
+
     this.session = session;
     if (explicitUsername != null && explicitUsername.isNotEmpty) {
       username = explicitUsername;
@@ -77,17 +81,22 @@ class RaphAuthController extends ChangeNotifier {
         username = _extractUserFromJwt(token);
       }
     }
-    notifyListeners();
+
+    final hasChanged = prevToken != token || prevUser != currentUser;
+    if (notify && hasChanged) {
+      notifyListeners();
+    }
   }
 
   Future<void> logout() async {
+    SocketService().disconnect();
     if (session != null) {
       await session!.logout();
     }
     currentUser = null;
     token = null;
+    username = null;
     session = null;
     notifyListeners();
   }
 }
-
