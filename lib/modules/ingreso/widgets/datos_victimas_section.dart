@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../controllers/ingreso_controller.dart';
 import '../../../shared/models/victima_data.dart';
@@ -9,6 +10,7 @@ import '../../../shared/components/custom_select.dart';
 import '../../../shared/models/configuracion.dart';
 import '../../../shared/services/configuracion_service.dart';
 import '../../../shared/services/socket_service.dart';
+import '../../../config/auth_controller.dart';
 
 class DatosVictimasSection extends StatefulWidget {
   final VoidCallback? onDespacho;
@@ -66,8 +68,6 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
     );
   }
 
-
-
   @override
   void initState() {
     super.initState();
@@ -96,7 +96,6 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   void _onControllerUpdate() {
     if (mounted) {
-      // Sincronizar controladores con los datos del modelo
       for (var victima in _ingresoController.victimas) {
         if (_dniControllers != null) {
           final controller = _dniControllers![victima.id];
@@ -124,7 +123,6 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
         }
       }
 
-      // Limpiar controladores huérfanos
       final activeIds = _ingresoController.victimas.map((v) => v.id).toSet();
       _dniControllers?.removeWhere((id, _) => !activeIds.contains(id));
       _nombreControllers?.removeWhere((id, _) => !activeIds.contains(id));
@@ -208,7 +206,7 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
       final controller = _getObservacionesController(victima);
       _textBeforeListening = controller.text;
-      
+
       setState(() {
         _isListening = true;
         _listeningVictimaIndex = index;
@@ -227,11 +225,9 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                 final separator = (lastChar == ' ' || lastChar == '\n') ? '' : ' ';
                 currentController.text = '$_textBeforeListening$separator$recognized';
               }
-              // Mover cursor al final
               currentController.selection = TextSelection.fromPosition(
                 TextPosition(offset: currentController.text.length),
               );
-              // Sincronizar con el controller
               _ingresoController.updateVictima(index, observaciones: currentController.text);
             }
           });
@@ -280,6 +276,7 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final victimas = _ingresoController.victimas;
+    final bool isFinalizado = _ingresoController.pasoIncidente >= 4;
 
     return ValueListenableBuilder<Map<String, dynamic>>(
       valueListenable: SocketService().lockedFields,
@@ -304,30 +301,39 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                         unselectedLabelColor: Colors.white60,
                         dividerColor: Colors.transparent,
                         tabs: victimas.asMap().entries.map((e) {
+                          final idx = e.key;
                           final victima = e.value;
                           final nombre = victima.nombre.trim();
-                          String tabLabel = 'Víctima ${e.key + 1}';
+                          String tabLabel = 'Víctima ${idx + 1}';
 
                           if (nombre.isNotEmpty) {
                             tabLabel = nombre.split(' ').first;
                             if (tabLabel.length > 10) tabLabel = '${tabLabel.substring(0, 8)}..';
                           }
 
-                          final bool isTabLocked = locks.containsKey('victima_${e.key}');
+                          final bool isTabLocked = SocketService().isFieldLockedByOther('victima_$idx');
+                          final bool isVicFin = _ingresoController.isVictimaAtencionFinalizada(idx);
 
                           return Tab(
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (victima.isCerrada) ...[
+                                  const Icon(Icons.check_circle_rounded, size: 13, color: Color(0xFF10B981)),
+                                  const SizedBox(width: 4),
+                                ] else if (isVicFin) ...[
+                                  const Icon(Icons.pending_actions_rounded, size: 13, color: Colors.amberAccent),
+                                  const SizedBox(width: 4),
+                                ],
                                 Text(tabLabel),
                                 if (isTabLocked) ...[
                                   const SizedBox(width: 4),
                                   const Icon(Icons.lock, size: 10, color: Colors.redAccent),
                                 ],
-                                if (victimas.length > 1 && !isTabLocked) ...[
+                                if (!isFinalizado && !isVicFin && !victima.isCerrada && victimas.length > 1 && !isTabLocked) ...[
                                   const SizedBox(width: 8),
                                   InkWell(
-                                    onTap: () => _ingresoController.removeVictima(e.key),
+                                    onTap: () => _ingresoController.removeVictima(idx),
                                     child: const Icon(Icons.close, size: 14),
                                   ),
                                 ],
@@ -338,11 +344,12 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.add, color: Colors.white),
-                    onPressed: () => _ingresoController.addVictima(),
-                    tooltip: 'Agregar víctima',
-                  ),
+                  if (!isFinalizado)
+                    IconButton(
+                      icon: const Icon(Icons.add, color: Colors.white),
+                      onPressed: () => _ingresoController.addVictima(),
+                      tooltip: 'Agregar víctima',
+                    ),
                 ],
               ),
             ),
@@ -360,16 +367,21 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
 
   Widget _buildVictimaForm(ThemeData theme, int index, VictimaData victima, Map<String, dynamic> locks) {
     final bool isCollaborative = _ingresoController.incidenteActual.idIncidente != null;
-    final bool isLocked = isCollaborative && locks.containsKey('victima_$index');
-    String lockedByName = "";
+    final bool isLocked = isCollaborative && SocketService().isFieldLockedByOther('victima_$index');
+    final bool isIncidenteFinalizado = _ingresoController.pasoIncidente >= 4;
+    final bool isIncidenteCerrado = _ingresoController.pasoIncidente >= 5 || _ingresoController.incidenteActual.activo == 0;
+    final bool isVictimaFinalizada = _ingresoController.isVictimaAtencionFinalizada(index);
+    final bool isReadOnly = isIncidenteFinalizado || isVictimaFinalizada || victima.isCerrada;
 
+    String lockedByName = "";
     if (isLocked) {
-      lockedByName = locks['victima_$index']['nombre'] ?? 'Otro usuario';
+      final lockInfo = locks['victima_$index'];
+      lockedByName = lockInfo is Map ? (lockInfo['nombre'] ?? 'Otro usuario') : lockInfo.toString();
     }
 
     return Focus(
       onFocusChange: (hasFocus) {
-        if (!isCollaborative || isLocked) return;
+        if (!isCollaborative || isLocked || isReadOnly) return;
         if (hasFocus) {
           _ingresoController.lockVictima(index);
         } else {
@@ -378,226 +390,546 @@ class _DatosVictimasSectionState extends State<DatosVictimasSection> with Ticker
       },
       child: Listener(
         onPointerDown: (_) {
-          if (!isCollaborative || isLocked) return;
+          if (!isCollaborative || isLocked || isReadOnly) return;
           _ingresoController.lockVictima(index);
         },
         child: Stack(
-        children: [
-          AbsorbPointer(
-            absorbing: isLocked,
-            child: Opacity(
-              opacity: isLocked ? 0.6 : 1.0,
-              child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (isLocked) ...[
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.lock, color: Colors.redAccent, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Víctima bloqueada. $lockedByName está editando a esta persona.',
-                                style: const TextStyle(
-                                  color: Colors.redAccent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+          children: [
+            AbsorbPointer(
+              absorbing: isLocked,
+              child: Opacity(
+                opacity: isLocked ? 0.6 : 1.0,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (isLocked) ...[
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 1,
-                          child: TextFormField(
-                            controller: _getDniController(victima),
-                            decoration: const InputDecoration(labelText: 'DNI'),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            onChanged: (val) => _ingresoController.updateVictima(index, dni: val),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 1,
-                          child: TextFormField(
-                            controller: _getNombreController(victima),
-                            decoration: const InputDecoration(labelText: 'Nombre y apellido'),
-                            onChanged: (val) => _ingresoController.updateVictima(index, nombre: val),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 1,
-                          child: TextFormField(
-                            controller: _getEdadController(victima),
-                            decoration: const InputDecoration(labelText: 'Edad'),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            onChanged: (val) => _ingresoController.updateVictima(index, edad: val),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 1,
-                          child: CustomSelect<Configuracion>(
-                            key: ValueKey('victima_${victima.id}_genero'),
-                            enabled: !isLocked,
-                            label: 'Género',
-                            fetchItems: () => ConfiguracionService.obtenerGeneros(),
-                            itemLabel: (item) => item.descripcion,
-                            initialSelectionId: victima.idConfGenero,
-                            matchById: (item) => item.idconfiguracion,
-                            onSelected: (val) {
-                              if (val != null) {
-                                _ingresoController.updateVictima(index, idConfGenero: val.idconfiguracion);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _getObservacionesController(victima),
-                      decoration: InputDecoration(
-                        labelText: 'Observaciones',
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(top: 8.0, right: 8.0),
-                          child: Align(
-                            alignment: Alignment.topRight,
-                            widthFactor: 1.0,
-                            heightFactor: 1.0,
-                            child: Tooltip(
-                              message: (_isListening && _listeningVictimaIndex == index)
-                                  ? 'Detener dictado por voz'
-                                  : 'Dictar por voz',
-                              child: Material(
-                                color: (_isListening && _listeningVictimaIndex == index)
-                                    ? Colors.red.withOpacity(0.2)
-                                    : Colors.transparent,
-                                type: MaterialType.circle,
-                                clipBehavior: Clip.antiAlias,
-                                child: IconButton(
-                                  icon: Icon(
-                                    (_isListening && _listeningVictimaIndex == index)
-                                        ? Icons.mic
-                                        : Icons.mic_none,
-                                    color: (_isListening && _listeningVictimaIndex == index)
-                                        ? Colors.redAccent
-                                        : Colors.white70,
+                            child: Row(
+                              children: [
+                                const Icon(Icons.lock, color: Colors.redAccent, size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Víctima bloqueada. $lockedByName está editando a esta persona.',
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                  onPressed: () => _toggleListening(index, victima),
                                 ),
-                              ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        // Sección de Cierre Individual de Víctima (interactiva aun cuando los campos están bloqueados)
+                        if (isVictimaFinalizada || victima.isCerrada) ...[
+                          _buildCierreVictimaCard(context, index, victima, isIncidenteCerrado),
+                          const SizedBox(height: 14),
+                        ],
+                        IgnorePointer(
+                          ignoring: isReadOnly,
+                          child: Opacity(
+                            opacity: isReadOnly ? 0.65 : 1.0,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 1,
+                                      child: TextFormField(
+                                        controller: _getDniController(victima),
+                                        decoration: const InputDecoration(labelText: 'DNI'),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                        onChanged: (val) => _ingresoController.updateVictima(index, dni: val),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      flex: 1,
+                                      child: TextFormField(
+                                        controller: _getNombreController(victima),
+                                        decoration: const InputDecoration(labelText: 'Nombre y apellido'),
+                                        onChanged: (val) => _ingresoController.updateVictima(index, nombre: val),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 1,
+                                      child: TextFormField(
+                                        controller: _getEdadController(victima),
+                                        decoration: const InputDecoration(labelText: 'Edad'),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                        onChanged: (val) => _ingresoController.updateVictima(index, edad: val),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      flex: 1,
+                                      child: CustomSelect<Configuracion>(
+                                        key: ValueKey('victima_${victima.id}_genero'),
+                                        enabled: !isLocked && !isReadOnly,
+                                        label: 'Género',
+                                        fetchItems: () => ConfiguracionService.obtenerGeneros(),
+                                        itemLabel: (item) => item.descripcion,
+                                        initialSelectionId: victima.idConfGenero,
+                                        matchById: (item) => item.idconfiguracion,
+                                        onSelected: (val) {
+                                          if (val != null) {
+                                            _ingresoController.updateVictima(index, idConfGenero: val.idconfiguracion);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _getObservacionesController(victima),
+                                  decoration: InputDecoration(
+                                    labelText: 'Observaciones',
+                                    suffixIcon: Padding(
+                                      padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+                                      child: Align(
+                                        alignment: Alignment.topRight,
+                                        widthFactor: 1.0,
+                                        heightFactor: 1.0,
+                                        child: Tooltip(
+                                          message: (_isListening && _listeningVictimaIndex == index)
+                                              ? 'Detener dictado por voz'
+                                              : 'Dictar por voz',
+                                          child: Material(
+                                            color: (_isListening && _listeningVictimaIndex == index)
+                                                ? Colors.red.withOpacity(0.2)
+                                                : Colors.transparent,
+                                            type: MaterialType.circle,
+                                            clipBehavior: Clip.antiAlias,
+                                            child: IconButton(
+                                              icon: Icon(
+                                                (_isListening && _listeningVictimaIndex == index)
+                                                    ? Icons.mic
+                                                    : Icons.mic_none,
+                                                color: (_isListening && _listeningVictimaIndex == index)
+                                                    ? Colors.redAccent
+                                                    : Colors.white70,
+                                              ),
+                                              onPressed: () => _toggleListening(index, victima),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  maxLines: 2,
+                                  onChanged: (val) => _ingresoController.updateVictima(index, observaciones: val),
+                                ),
+                                const SizedBox(height: 20),
+                                const Divider(color: Colors.white10),
+                                const SizedBox(height: 12),
+                                _buildTriageBanner(theme, index, victima),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                      maxLines: 2,
-                      onChanged: (val) => _ingresoController.updateVictima(index, observaciones: val),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    const Divider(color: Colors.white10),
-                    const SizedBox(height: 12),
-                    
-                    // Triage section
-                    _buildTriageBanner(theme, index, victima),
-                    const SizedBox(height: 20),
-                    const Divider(color: Colors.white10),
-                    const SizedBox(height: 12),
-
-                    // Attachments section
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          FilePickerResult? result = await FilePicker.platform.pickFiles(
-                            allowMultiple: true,
-                            type: FileType.custom,
-                            allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
-                          );
- 
-                          if (result != null) {
-                            setState(() {
-                              victima.archivosAdjuntos.addAll(result.files);
-                            });
-                          }
-                        },
-                        icon: const Icon(Icons.attach_file, size: 20),
-                        label: const Text(
-                          'Adjuntar documentación',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                          foregroundColor: theme.colorScheme.primary,
-                          side: BorderSide(color: theme.colorScheme.primary.withOpacity(0.5)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (victima.archivosAdjuntos.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: victima.archivosAdjuntos.map((file) {
-                            return Chip(
-                              label: Text(
-                                file.name,
-                                style: const TextStyle(fontSize: 12),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              deleteIcon: const Icon(Icons.close, size: 16),
-                              onDeleted: () {
-                                setState(() {
-                                  victima.archivosAdjuntos.remove(file);
-                                });
-                              },
-                              backgroundColor: theme.colorScheme.surface,
-                              side: const BorderSide(color: Colors.white24),
-                            );
-                          }).toList().cast<Widget>(),
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCierreVictimaCard(BuildContext context, int index, VictimaData victima, bool isIncidenteCerrado) {
+    final bool cerrada = victima.isCerrada;
+
+    if (cerrada) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.45)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.verified_rounded, color: Color(0xFF10B981), size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'CIERRE DE VÍCTIMA REGISTRADO',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              victima.reporte ?? '',
+              style: const TextStyle(color: Colors.white, fontSize: 12.5),
+            ),
+            if (victima.usuarioCierre != null || victima.fechaHoraCierre != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Cerrado por ${victima.usuarioCierre ?? "operador"}'
+                '${victima.fechaHoraCierre != null ? " • ${victima.fechaHoraCierre!.day.toString().padLeft(2, '0')}/${victima.fechaHoraCierre!.month.toString().padLeft(2, '0')} ${victima.fechaHoraCierre!.hour.toString().padLeft(2, '0')}:${victima.fechaHoraCierre!.minute.toString().padLeft(2, '0')}" : ""}',
+                style: const TextStyle(color: Colors.white54, fontSize: 10.5),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amberAccent.withOpacity(0.45)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.assignment_turned_in_outlined, color: Colors.amberAccent, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ATENCIÓN OPERATIVA FINALIZADA',
+                  style: TextStyle(
+                    color: Colors.amberAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Completá el cierre individual de esta víctima para habilitar el cierre del incidente.',
+                  style: TextStyle(color: Colors.white70, fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton.icon(
+            onPressed: () => _mostrarModalCerrarVictima(context, index, victima),
+            icon: const Icon(Icons.task_alt_rounded, size: 15),
+            label: const Text(
+              'CERRAR VÍCTIMA',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarModalCerrarVictima(BuildContext context, int index, VictimaData victima) {
+    final reporteCtrl = TextEditingController(text: victima.reporte ?? '');
+    final nombreDisplay = victima.nombre.trim().isNotEmpty
+        ? victima.nombre.trim()
+        : 'Víctima ${index + 1}';
+
+    // Buscar datos del despacho de esta víctima en el resumen
+    String? movilInfo;
+    String? hospitalInfo;
+    for (final r in _ingresoController.resumenDespachosVictimas) {
+      if ((victima.idVictima != null && r.idVictima == victima.idVictima) || r.index == index + 1) {
+        movilInfo = r.movilNombre;
+        hospitalInfo = r.hospitalNombre;
+        break;
+      }
+    }
+
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateModal) {
+            return PointerInterceptor(
+              child: AlertDialog(
+                backgroundColor: const Color(0xFF1E2429),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Colors.white12, width: 1),
+                ),
+                title: Row(
+                  children: [
+                    const Icon(Icons.person_pin_circle_rounded, color: Color(0xFF10B981), size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Cierre de Víctima: $nombreDisplay',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: 460,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.03),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DNI: ${victima.dni.isNotEmpty ? victima.dni : "No informado"} • Edad: ${victima.edad.isNotEmpty ? "${victima.edad} años" : "No informada"}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                            ),
+                            if (movilInfo != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Unidad interviniente: $movilInfo',
+                                style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                            if (hospitalInfo != null && hospitalInfo.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Hospital de destino: $hospitalInfo',
+                                style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Ingresá el informe / observación final de cierre para esta víctima:',
+                        style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: reporteCtrl,
+                        maxLines: 4,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          labelText: 'Reporte de cierre de la víctima',
+                          alignLabelWithHint: true,
+                          hintText: 'Ej: Paciente trasladado y entregado en guardia del Hospital Heller estable...',
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.03),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Colors.white12, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                actions: [
+                  TextButton(
+                    onPressed: isSaving
+                        ? null
+                        : () {
+                            reporteCtrl.dispose();
+                            Navigator.pop(dialogCtx);
+                          },
+                    child: const Text('CANCELAR', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold)),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final texto = reporteCtrl.text.trim();
+                            if (texto.isEmpty) {
+                              _mostrarToastCierreVictima(
+                                context,
+                                titulo: 'Reporte requerido',
+                                mensaje: 'Por favor ingresá un reporte de cierre para la víctima.',
+                                accentColor: const Color(0xFFF59E0B),
+                                iconData: Icons.warning_amber_rounded,
+                              );
+                              return;
+                            }
+                            setStateModal(() => isSaving = true);
+                            final ok = await _ingresoController.cerrarVictimaIndividual(
+                              index,
+                              texto,
+                              usuario: RaphAuthController.instance.currentUsername,
+                            );
+                            if (dialogCtx.mounted) {
+                              reporteCtrl.dispose();
+                              Navigator.pop(dialogCtx);
+                              _mostrarToastCierreVictima(
+                                context,
+                                titulo: ok ? 'Cierre de víctima registrado' : 'Error al guardar cierre',
+                                mensaje: ok
+                                    ? 'El informe de cierre de $nombreDisplay se guardó correctamente.'
+                                    : 'No se pudo guardar el cierre de la víctima.',
+                                accentColor: ok ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                iconData: ok ? Icons.verified_rounded : Icons.error_outline_rounded,
+                              );
+                            }
+                          },
+                    icon: isSaving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.check_rounded, size: 16),
+                    label: Text(
+                      isSaving ? 'GUARDANDO...' : 'GUARDAR CIERRE DE VÍCTIMA',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _mostrarToastCierreVictima(
+    BuildContext context, {
+    required String titulo,
+    required String mensaje,
+    required Color accentColor,
+    required IconData iconData,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        width: 460,
+        duration: const Duration(seconds: 4),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161D24),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accentColor.withOpacity(0.55), width: 1.4),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.45),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: accentColor.withOpacity(0.16),
+                blurRadius: 16,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: accentColor.withOpacity(0.4)),
+                ),
+                child: Icon(iconData, color: accentColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titulo,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      mensaje,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                splashRadius: 16,
+                icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 18),
+                onPressed: () => messenger.hideCurrentSnackBar(),
+              ),
+            ],
           ),
         ),
-      ],
-    ),
-  ),
-);
+      ),
+    );
   }
 
   Widget _buildTriageBanner(ThemeData theme, int index, VictimaData victima) {

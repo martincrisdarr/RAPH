@@ -13,22 +13,7 @@ class CustomStepper extends StatelessWidget {
   });
 
   Color _getStepColor(int stepIndex, ThemeData theme) {
-    switch (stepIndex) {
-      case 0:
-        return const Color(0xFF3B82F6); // Incidente (Blue)
-      case 1:
-        return const Color(0xFFF59E0B); // Despacho (Amber / Orange)
-      case 2:
-        return const Color(0xFF06B6D4); // En sitio (Cyan)
-      case 3:
-        return const Color(0xFF8B5CF6); // Traslado (Purple / Violet)
-      case 4:
-        return const Color(0xFF10B981); // Fin (Emerald / Green)
-      case 5:
-        return const Color(0xFFEF4444); // Cierre (Red / Rose)
-      default:
-        return theme.colorScheme.primary;
-    }
+    return const Color(0xFF06B6D4); // Azul Cyan (mismo color de En sitio para todos los pasos)
   }
 
   @override

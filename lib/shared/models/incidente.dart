@@ -69,7 +69,7 @@ class Incidente {
       idConfCodigo: parsedIdConf,
       codigoTriage: triage,
       protocolosIds: json['protocolos_ids'],
-      reporte: json['reporte'],
+      reporte: json['reporte'] ?? json['reporte_cierre'],
       fechaHoraAuto: json['fechahoraauto'] != null ? DateTime.tryParse(json['fechahoraauto']) : null,
       activo: json['activo'] != null ? int.tryParse(json['activo'].toString()) : 1,
       victimas: json['victimas'] != null ? (json['victimas'] as List).map((v) => Victima.fromJson(v)).toList() : null,
@@ -109,7 +109,10 @@ class Incidente {
     map['idconf_codigo'] = finalIdConf;
     if (protocolosIds != null) map['protocolos_ids'] = protocolosIds;
 
-    if (reporte != null) map['reporte'] = reporte;
+    if (reporte != null) {
+      map['reporte'] = reporte;
+      map['reporte_cierre'] = reporte;
+    }
     if (fechaHoraAuto != null) map['fechahoraauto'] = fechaHoraAuto?.toIso8601String();
     if (activo != null) map['activo'] = activo;
     if (victimas != null) map['victimas'] = victimas?.map((v) => v.toJson()).toList();

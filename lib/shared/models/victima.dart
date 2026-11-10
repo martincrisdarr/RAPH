@@ -14,6 +14,10 @@ class Victima {
   final String? nombreMovilAsignado;
   final int? idDespacho;
   final String? reporte;
+  final DateTime? fechaHoraCierre;
+  final String? usuarioCierre;
+
+  bool get isCerrada => reporte != null && reporte!.trim().isNotEmpty;
 
   Victima({
     this.idVictima,
@@ -31,6 +35,8 @@ class Victima {
     this.nombreMovilAsignado,
     this.idDespacho,
     this.reporte,
+    this.fechaHoraCierre,
+    this.usuarioCierre,
   });
 
   factory Victima.fromJson(Map<String, dynamic> json) {
@@ -94,6 +100,17 @@ class Victima {
       }
     }
 
+    String? reporte = json['reporte']?.toString();
+    String? rawFechaCierre = json['fechahora_cierre']?.toString();
+    String? usuarioCierre = json['usuario_cierre']?.toString();
+
+    if (json['cierre'] is Map) {
+      final cierreMap = json['cierre'] as Map;
+      reporte ??= cierreMap['reporte']?.toString();
+      rawFechaCierre ??= cierreMap['fechahora_cierre']?.toString();
+      usuarioCierre ??= cierreMap['usuario_cierre']?.toString();
+    }
+
     return Victima(
       idVictima: json['idvictima'] != null ? int.tryParse(json['idvictima'].toString()) : null,
       nombresApellidos: nombresApellidos,
@@ -113,7 +130,9 @@ class Victima {
       idMovilAsignado: idMovilAsignado,
       nombreMovilAsignado: nombreMovilAsignado,
       idDespacho: idDespacho,
-      reporte: json['reporte'],
+      reporte: reporte,
+      fechaHoraCierre: rawFechaCierre != null ? DateTime.tryParse(rawFechaCierre) : null,
+      usuarioCierre: usuarioCierre,
     );
   }
 
@@ -134,6 +153,8 @@ class Victima {
     if (nombreMovilAsignado != null) map['nombre_movil_asignado'] = nombreMovilAsignado;
     if (idDespacho != null) map['iddespacho'] = idDespacho;
     if (reporte != null) map['reporte'] = reporte;
+    if (fechaHoraCierre != null) map['fechahora_cierre'] = fechaHoraCierre!.toIso8601String();
+    if (usuarioCierre != null) map['usuario_cierre'] = usuarioCierre;
     return map;
   }
 
@@ -154,6 +175,8 @@ class Victima {
     String? nombreMovilAsignado,
     int? idDespacho,
     String? reporte,
+    DateTime? fechaHoraCierre,
+    String? usuarioCierre,
     bool clearMovil = false,
   }) {
     return Victima(
@@ -172,6 +195,8 @@ class Victima {
       nombreMovilAsignado: clearMovil ? null : (nombreMovilAsignado ?? this.nombreMovilAsignado),
       idDespacho: clearMovil ? null : (idDespacho ?? this.idDespacho),
       reporte: reporte ?? this.reporte,
+      fechaHoraCierre: fechaHoraCierre ?? this.fechaHoraCierre,
+      usuarioCierre: usuarioCierre ?? this.usuarioCierre,
     );
   }
 }
