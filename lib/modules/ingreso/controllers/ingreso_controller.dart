@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/models/demanda_recibida.dart';
@@ -7,6 +8,7 @@ import '../../../shared/services/demanda_recibida_service.dart';
 import '../../../shared/models/incidente.dart';
 import '../../../shared/services/incidente_service.dart';
 import '../../../shared/models/victima_data.dart';
+import '../../../shared/models/victima_despacho_resumen.dart';
 import '../../../shared/services/victima_service.dart';
 import '../../../shared/services/socket_service.dart';
 import '../../../shared/services/configuracion_service.dart';
@@ -18,6 +20,9 @@ class IngresoController extends ChangeNotifier {
   factory IngresoController() => _instance;
   IngresoController._internal() {
     _cargarBorrador();
+    SocketService().registerFieldListener('despacho_actualizado', (raw) {
+      _handleDespachoActualizadoSocket(raw);
+    });
   }
 
   DemandaRecibida _demandaActual = DemandaRecibida(idCfgEstado: 5);
@@ -31,6 +36,197 @@ class IngresoController extends ChangeNotifier {
 
   List<Map<String, dynamic>> _despachosActivos = [];
   List<Map<String, dynamic>> get despachosActivos => _despachosActivos;
+
+  List<VictimaDespachoResumen> get resumenDespachosVictimas {
+    final List<VictimaDespachoResumen> items = [];
+    final Set<int> usedDespachoIds = {};
+
+    for (int i = 0; i < _victimas.length; i++) {
+      final vic = _victimas[i];
+      final number = i + 1;
+
+      Map<String, dynamic>? dMatch;
+
+      // 1. Por idvictima explícito
+      if (vic.idVictima != null) {
+        for (final d in _despachosActivos.reversed) {
+          final dVic = int.tryParse(d['idvictima']?.toString() ?? '');
+          if (dVic == vic.idVictima) {
+            dMatch = d;
+            break;
+          }
+        }
+      }
+
+      // 2. Por idMovilAsignado
+      if (dMatch == null && vic.idMovilAsignado != null && vic.idMovilAsignado!.isNotEmpty) {
+        for (final d in _despachosActivos.reversed) {
+          final dM = (d['idmovil'] ?? d['idmovilunidad'])?.toString();
+          if (dM == vic.idMovilAsignado) {
+            dMatch = d;
+            break;
+          }
+        }
+      }
+
+      // 3. Si solo hay 1 víctima y despachos disponibles
+      if (dMatch == null && _victimas.length == 1 && _despachosActivos.isNotEmpty) {
+        dMatch = _despachosActivos.last;
+      }
+
+      // 4. Emparejar por orden si quedan despachos no asociados explícitamente
+      if (dMatch == null && _despachosActivos.isNotEmpty) {
+        for (final d in _despachosActivos) {
+          final dId = int.tryParse(d['iddespacho']?.toString() ?? '');
+          if (dId != null && !usedDespachoIds.contains(dId)) {
+            final dVic = int.tryParse(d['idvictima']?.toString() ?? '');
+            if (dVic == null || dVic == vic.idVictima) {
+              dMatch = d;
+              break;
+            }
+          }
+        }
+      }
+
+      int? dId;
+      if (dMatch != null) {
+        dId = int.tryParse(dMatch['iddespacho']?.toString() ?? '');
+        if (dId != null) usedDespachoIds.add(dId);
+      }
+
+      // Triage
+      final triageVictima = vic.codigoTriage?.trim();
+      final triageIncidente = _incidenteActual.codigoTriage?.trim();
+      final idConfCodigoIncidente = _incidenteActual.idConfCodigo;
+      final tieneProt = protocolosSeleccionados.isNotEmpty;
+
+      String? effectiveTriage = (triageVictima != null && triageVictima.isNotEmpty) ? triageVictima : null;
+      if (effectiveTriage == null) {
+        if (tieneProt || idConfCodigoIncidente == 29 || idConfCodigoIncidente == 135 || triageIncidente?.toLowerCase() == 'rojo') {
+          effectiveTriage = 'Rojo';
+        } else if (idConfCodigoIncidente == 30 || triageIncidente?.toLowerCase() == 'amarillo') {
+          effectiveTriage = 'Amarillo';
+        } else if (idConfCodigoIncidente == 31 || triageIncidente?.toLowerCase() == 'verde') {
+          effectiveTriage = 'Verde';
+        } else if (idConfCodigoIncidente == 63 || (triageIncidente != null && triageIncidente.toLowerCase().contains('sin'))) {
+          effectiveTriage = 'Sin código';
+        }
+      }
+
+      // Móvil y Estado operativo
+      String? movilNombre;
+      String? idMovil;
+      String estadoOp = 'sin_despacho';
+      String? hospitalNombre;
+      bool isFinalizado = false;
+      int paso = 0;
+
+      if (dMatch != null) {
+        idMovil = (dMatch['idmovil'] ?? dMatch['idmovilunidad'])?.toString();
+        hospitalNombre = dMatch['hospital_nombre']?.toString();
+
+        if (dMatch['movilunidad'] is Map) {
+          final mu = dMatch['movilunidad'] as Map;
+          if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+            movilNombre = mu['movil']['nombre'].toString();
+          } else if (mu['patente'] != null) {
+            movilNombre = 'Unidad ${mu['patente']}';
+          }
+        }
+        movilNombre ??= dMatch['movil_nombre']?.toString() ?? (idMovil != null ? 'Móvil $idMovil' : 'Móvil asignado');
+
+        final act = dMatch['activo'];
+        final rawEst = (dMatch['estado_operativo'] ?? dMatch['estado'] ?? 'despachado').toString().trim().toLowerCase();
+
+        estadoOp = rawEst;
+
+        if (rawEst == 'finalizado' || rawEst == 'en_hospital' || rawEst == 'fin' || rawEst == 'arribado' || rawEst == 'base' ||
+            ((act == 0 || act == '0' || act == false) && rawEst == 'finalizado')) {
+          paso = 4;
+          isFinalizado = true;
+          estadoOp = 'finalizado';
+        } else if (rawEst == 'traslado' || rawEst == 'en_traslado' || rawEst == 'en traslado') {
+          paso = 3;
+          isFinalizado = false;
+        } else if (rawEst == 'en_sitio' || rawEst == 'en sitio' || rawEst == 'en escena' || rawEst == 'arribado escena' || rawEst == 'arribado_escena') {
+          paso = 2;
+          isFinalizado = false;
+        } else if (rawEst == 'despachado' || rawEst == 'despacho' || rawEst == 'en camino' || rawEst == 'en_camino' || rawEst == 'asignado') {
+          paso = 1;
+          isFinalizado = false;
+        } else {
+          paso = 1;
+          isFinalizado = false;
+        }
+      } else if (vic.idMovilAsignado != null && vic.idMovilAsignado!.isNotEmpty) {
+        idMovil = vic.idMovilAsignado;
+        movilNombre = 'Móvil $idMovil';
+        estadoOp = 'despachado';
+        paso = 1;
+      }
+
+      final nombreCompleto = vic.nombre.trim();
+      final nombreDisplay = nombreCompleto.isNotEmpty ? nombreCompleto : 'Víctima $number';
+
+      items.add(VictimaDespachoResumen(
+        index: number,
+        idVictima: vic.idVictima,
+        nombre: nombreDisplay,
+        triage: effectiveTriage,
+        movilNombre: movilNombre,
+        idMovil: idMovil,
+        estadoOperativo: estadoOp,
+        hospitalNombre: hospitalNombre,
+        isFinalizado: isFinalizado,
+        paso: paso,
+        idDespacho: dId,
+      ));
+    }
+
+    // Unidades adicionales asignadas al incidente que no correspondan a una víctima puntual
+    for (final d in _despachosActivos) {
+      final dId = int.tryParse(d['iddespacho']?.toString() ?? '');
+      if (dId != null && !usedDespachoIds.contains(dId)) {
+        usedDespachoIds.add(dId);
+        final idM = (d['idmovil'] ?? d['idmovilunidad'])?.toString();
+        String? mNom;
+        if (d['movilunidad'] is Map) {
+          final mu = d['movilunidad'] as Map;
+          if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+            mNom = mu['movil']['nombre'].toString();
+          }
+        }
+        mNom ??= d['movil_nombre']?.toString() ?? (idM != null ? 'Móvil $idM' : 'Móvil');
+
+        final act = d['activo'];
+        final rawEst = (d['estado_operativo'] ?? d['estado'] ?? 'despachado').toString().trim().toLowerCase();
+        int paso = 1;
+        bool isFin = false;
+        if (rawEst == 'finalizado' || rawEst == 'en_hospital' || ((act == 0 || act == '0' || act == false) && rawEst == 'finalizado')) {
+          paso = 4;
+          isFin = true;
+        } else if (rawEst.contains('traslado')) {
+          paso = 3;
+        } else if (rawEst.contains('sitio') || rawEst.contains('escena')) {
+          paso = 2;
+        }
+
+        items.add(VictimaDespachoResumen(
+          index: items.length + 1,
+          nombre: 'Apoyo / Unidad extra',
+          movilNombre: mNom,
+          idMovil: idM,
+          estadoOperativo: rawEst,
+          hospitalNombre: d['hospital_nombre']?.toString(),
+          isFinalizado: isFin,
+          paso: paso,
+          idDespacho: dId,
+        ));
+      }
+    }
+
+    return items;
+  }
 
   void setPasoIncidente(int paso) {
     _pasoIncidente = paso.clamp(0, 5);
@@ -569,7 +765,13 @@ class IngresoController extends ChangeNotifier {
       if (_incidenteActual.idIncidente == null) {
         final creado = await IncidenteService.crear(_incidenteActual);
         if (creado != null && creado.idIncidente != null) {
-          _incidenteActual = _incidenteActual.copyWith(idIncidente: creado.idIncidente);
+          _incidenteActual = _incidenteActual.copyWith(
+            idIncidente: creado.idIncidente,
+            direccion: (_incidenteActual.direccion == null || _incidenteActual.direccion!.trim().isEmpty)
+                ? creado.direccion
+                : _incidenteActual.direccion,
+            direccionAuto: creado.direccionAuto ?? _incidenteActual.direccionAuto,
+          );
           _sincronizarSocketRoom();
           
           // Vinculamos el incidente con la demanda
@@ -838,8 +1040,10 @@ class IngresoController extends ChangeNotifier {
     if (rawMap.containsKey('iddemandarecibida') || rawMap.containsKey('nro_llamada_entrante')) {
       _demandaActual = DemandaRecibida.fromJson(rawMap);
     } else {
+      final tieneReporte = _incidenteActual.reporte != null && _incidenteActual.reporte!.trim().isNotEmpty;
+      final uEst = int.tryParse((_incidenteActual.ultimoEstadoRel?['estado'] ?? _incidenteActual.ultimoEstadoRel?['idestado'] ?? '').toString());
       _demandaActual = DemandaRecibida(
-        idCfgEstado: 5,
+        idCfgEstado: (tieneReporte || uEst == 7 || _incidenteActual.activo == 0) ? 7 : 5,
         idIncidente: idIncidente,
         incidente: _incidenteActual,
         fechaHora: DateTime.now(),
@@ -868,12 +1072,22 @@ class IngresoController extends ChangeNotifier {
           _victimas = incidenteCompleto.victimas!.map((v) => VictimaData.fromVictima(v)).toList();
           _asegurarTriageRojoVictimas();
         }
-        _demandaActual = _demandaActual.copyWith(incidente: _incidenteActual);
+        final tieneReporte = _incidenteActual.reporte != null && _incidenteActual.reporte!.trim().isNotEmpty;
+        final uEst = int.tryParse((_incidenteActual.ultimoEstadoRel?['estado'] ?? _incidenteActual.ultimoEstadoRel?['idestado'] ?? '').toString());
+        _demandaActual = _demandaActual.copyWith(
+          incidente: _incidenteActual,
+          idCfgEstado: (tieneReporte || uEst == 7 || _incidenteActual.activo == 0) ? 7 : _demandaActual.idCfgEstado,
+        );
         _sincronizarSocketRoom();
       }
 
+      await _hidratarCierresVictimas(idIncidente);
+
       final llamadas = await DemandaRecibidaService.obtenerTodasPorIncidente(idIncidente);
       _llamadasDelIncidente = llamadas;
+      if (llamadas.any((l) => l.idCfgEstado == 7)) {
+        _demandaActual = _demandaActual.copyWith(idCfgEstado: 7);
+      }
       await _guardarBorrador();
       notifyListeners();
 
@@ -882,6 +1096,108 @@ class IngresoController extends ChangeNotifier {
     } catch (e) {
       debugPrint('[IngresoController] Error en carga diferida de incidente: $e');
     }
+  }
+
+  Future<void> _hidratarCierresVictimas(int idIncidente) async {
+    try {
+      final cierres = await VictimaService.obtenerCierresPorIncidente(idIncidente);
+      if (cierres.isEmpty) return;
+
+      bool changed = false;
+      for (final c in cierres) {
+        final idVic = int.tryParse(c['idvictima']?.toString() ?? '');
+        if (idVic == null) continue;
+        final rep = c['reporte']?.toString();
+        if (rep == null || rep.trim().isEmpty) continue;
+
+        for (final v in _victimas) {
+          if (v.idVictima == idVic) {
+            v.reporte = rep;
+            v.fechaHoraCierre = c['fechahora_cierre'] != null
+                ? DateTime.tryParse(c['fechahora_cierre'].toString())
+                : v.fechaHoraCierre;
+            v.usuarioCierre = c['usuario_cierre']?.toString() ?? v.usuarioCierre;
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[IngresoController] Error al hidratar cierres de víctimas: $e');
+    }
+  }
+
+  /// Indica si la atención operativa de la víctima en [index] ya finalizó.
+  bool isVictimaAtencionFinalizada(int index) {
+    if (_pasoIncidente >= 4) return true;
+    final resumen = resumenDespachosVictimas;
+    if (index < 0 || index >= _victimas.length) return false;
+    final v = _victimas[index];
+    for (final r in resumen) {
+      if ((v.idVictima != null && r.idVictima == v.idVictima) || r.index == index + 1) {
+        return r.isFinalizado || r.paso >= 4;
+      }
+    }
+    return false;
+  }
+
+  /// Indica si todas las víctimas registradas ya cuentan con su cierre individual.
+  bool get todasLasVictimasCerradas {
+    if (_victimas.isEmpty) return true;
+    return _victimas.every((v) => v.isCerrada);
+  }
+
+  /// Cantidad de víctimas que ya tienen su cierre individual completado.
+  int get cantidadVictimasCerradas {
+    return _victimas.where((v) => v.isCerrada).length;
+  }
+
+  /// Registra el cierre individual de una víctima en la tabla ser_sien_dsp_victima_cierre.
+  Future<bool> cerrarVictimaIndividual(int index, String reporte, {String? usuario}) async {
+    if (index < 0 || index >= _victimas.length) return false;
+    final v = _victimas[index];
+    final repTrim = reporte.trim();
+    if (repTrim.isEmpty) return false;
+
+    int? idInc = _incidenteActual.idIncidente ?? _demandaActual.idIncidente;
+    if (idInc == null) {
+      final creadoInc = await IncidenteService.crear(_incidenteActual);
+      if (creadoInc?.idIncidente != null) {
+        idInc = creadoInc!.idIncidente;
+        _incidenteActual = _incidenteActual.copyWith(idIncidente: idInc);
+      }
+    }
+    if (idInc == null) return false;
+
+    if (v.idVictima == null) {
+      final payload = v.toVictima(idInc);
+      final creadaV = await VictimaService.crear(payload);
+      if (creadaV?.idVictima != null) {
+        v.idVictima = creadaV!.idVictima;
+      }
+    }
+    if (v.idVictima == null) return false;
+
+    final res = await VictimaService.cerrarVictima(
+      idVictima: v.idVictima!,
+      idIncidente: idInc,
+      reporte: repTrim,
+      usuario: usuario,
+    );
+
+    if (res != null) {
+      v.reporte = res['reporte']?.toString() ?? repTrim;
+      v.fechaHoraCierre = res['fechahora_cierre'] != null
+          ? DateTime.tryParse(res['fechahora_cierre'].toString())
+          : DateTime.now();
+      v.usuarioCierre = res['usuario_cierre']?.toString() ?? usuario;
+      await _guardarBorrador();
+      notifyListeners();
+      return true;
+    }
+    return false;
   }
 
   Future<void> cargarDemanda(DemandaRecibida demanda) async {
@@ -927,6 +1243,9 @@ class IngresoController extends ChangeNotifier {
             _asegurarTriageRojoVictimas();
           }
         }
+        if (idIncidente != null) {
+          await _hidratarCierresVictimas(idIncidente);
+        }
         _guardarBorrador();
         notifyListeners();
         await actualizarPasoIncidente();
@@ -965,161 +1284,173 @@ class IngresoController extends ChangeNotifier {
     actualizarPasoIncidente();
   }
 
-  bool _isActualizandoPaso = false;
+  void _handleDespachoActualizadoSocket(String raw) {
+    try {
+      if (raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        final Map<String, dynamic>? data = decoded is Map<String, dynamic>
+            ? decoded
+            : (decoded is Map ? Map<String, dynamic>.from(decoded) : null);
 
-  /// Calcula y actualiza el paso del incidente (0: Incidente, 1: Despacho, 2: En sitio, 3: Traslado, 4: Fin, 5: Cierre)
+        if (data != null) {
+          final idInc = int.tryParse((data['idincidente'] ?? data['id_incidente'])?.toString() ?? '');
+          final currentInc = _incidenteActual.idIncidente ?? _demandaActual.idIncidente;
+
+          // Si el despacho pertenece al incidente que tenemos actualmente abierto
+          if (idInc != null && currentInc != null && idInc == currentInc) {
+            final idD = int.tryParse(data['iddespacho']?.toString() ?? '');
+            if (idD != null) {
+              final idx = _despachosActivos.indexWhere((d) => int.tryParse(d['iddespacho']?.toString() ?? '') == idD);
+              if (idx != -1) {
+                _despachosActivos[idx] = {
+                  ..._despachosActivos[idx],
+                  ...data,
+                };
+              } else {
+                _despachosActivos.add(data);
+              }
+
+              if (_incidenteActual.despachos != null) {
+                final incDespList = List<dynamic>.from(_incidenteActual.despachos!);
+                final dIdx = incDespList.indexWhere((d) => d is Map && int.tryParse(d['iddespacho']?.toString() ?? '') == idD);
+                if (dIdx != -1) {
+                  incDespList[dIdx] = {
+                    ...Map<String, dynamic>.from(incDespList[dIdx] as Map),
+                    ...data,
+                  };
+                  _incidenteActual = _incidenteActual.copyWith(despachos: incDespList);
+                }
+              }
+              notifyListeners();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[IngresoController] Error parsing despacho_actualizado socket: $e');
+    }
+    actualizarPasoIncidente();
+  }
+
+  bool _isActualizandoPaso = false;
+  bool _pendingActualizarPaso = false;
+
+  /// Calcula y actualiza el paso del incidente respetando todas las víctimas y despachos
+  /// (0: Incidente, 1: Despacho, 2: En sitio, 3: Traslado, 4: Fin, 5: Cierre)
   Future<void> actualizarPasoIncidente({Map<String, dynamic>? rawMapHint}) async {
-    if (_isActualizandoPaso) return;
+    if (_isActualizandoPaso) {
+      _pendingActualizarPaso = true;
+      return;
+    }
     _isActualizandoPaso = true;
     try {
       final idIncidente = _incidenteActual.idIncidente ?? _demandaActual.idIncidente;
 
-      int pasoCalculado = 0;
+      // 1. Sincronizar despachos desde _incidenteActual si _despachosActivos está vacío
+      if (_despachosActivos.isEmpty && _incidenteActual.despachos != null && _incidenteActual.despachos!.isNotEmpty) {
+        _despachosActivos = _incidenteActual.despachos!
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+      }
 
-    // Si el incidente está cerrado
-    if (_incidenteActual.activo == 0 ||
-        _demandaActual.idCfgEstado == 7 ||
-        _demandaActual.idCfgEstado == 8) {
-      pasoCalculado = _demandaActual.idCfgEstado == 8 ? 4 : 5;
-    }
-
-    final List<String> estadosDetectados = [];
-
-    // 1. Detección rápida desde rawMapHint (útil al navegar desde Listados / Kanban)
-    if (rawMapHint != null) {
-      if (rawMapHint['moviles'] is List) {
-        for (var m in (rawMapHint['moviles'] as List)) {
-          if (m is Map && m['status'] != null) {
-            estadosDetectados.add(m['status'].toString());
+      // 2. Sincronizar desde rawMapHint (útil al navegar desde Listados / Kanban)
+      if (rawMapHint != null) {
+        if (rawMapHint['despachos'] is List) {
+          final dList = (rawMapHint['despachos'] as List).whereType<Map<String, dynamic>>().toList();
+          if (dList.isNotEmpty) {
+            _despachosActivos = dList;
           }
         }
       }
-      final incHint = rawMapHint['incidente'] is Map ? rawMapHint['incidente'] : rawMapHint;
-      if (incHint is Map && incHint['victimas'] is List) {
-        for (var v in (incHint['victimas'] as List)) {
-          if (v is Map && v['despachos'] is List) {
-            for (var d in (v['despachos'] as List)) {
-              if (d is Map && (d['activo'] == 1 || d['activo'] == '1' || d['activo'] == true)) {
-                estadosDetectados.add('Despachado');
-              }
-            }
-          }
-        }
-      }
-    }
 
-    // 2. Detección desde los móviles en memoria de DespachoController
-    try {
-      final despController = DespachoController();
+      // 3. Cálculo sincrónico con los datos en memoria
+      _pasoIncidente = _calcularPasoDesdeResumen(resumenDespachosVictimas, _pasoIncidente);
+      notifyListeners();
+
+      // 4. Consulta asíncrona de despachos en backend en tiempo real (incluyendo finalizados)
       if (idIncidente != null) {
-        final movilesAsignados = despController.moviles.where((m) =>
-          m.idIncidenteActivo == idIncidente ||
-          (m.idIncidenteActivo != null && m.idIncidenteActivo.toString() == idIncidente.toString())
-        ).toList();
-
-        for (var m in movilesAsignados) {
-          estadosDetectados.add(m.estado);
-        }
-      }
-    } catch (_) {}
-
-    // 3. Detección desde las víctimas del incidente actual
-    if (_incidenteActual.victimas != null) {
-      for (var vic in _incidenteActual.victimas!) {
-        if (vic.idMovilAsignado != null && vic.idMovilAsignado!.trim().isNotEmpty) {
-          estadosDetectados.add('Despachado');
-        }
-        if (vic.idDespacho != null) {
-          estadosDetectados.add('Despachado');
-        }
-      }
-    }
-
-    // 4. Detección directa desde los despachos expandidos del incidente
-    if (_incidenteActual.despachos != null && _incidenteActual.despachos!.isNotEmpty) {
-      for (var d in _incidenteActual.despachos!) {
-        if (d is Map) {
-          final act = d['activo'];
-          // Solo despachos activos (activo == 1), ignorar cancelados (activo == 2)
-          if (act == 1 || act == '1' || act == true) {
-            estadosDetectados.add('Despachado');
-            if (d['movilunidad'] is Map && d['movilunidad']['movil'] is Map) {
-              final mData = d['movilunidad']['movil'];
-              if (mData['estado'] != null) {
-                estadosDetectados.add(mData['estado'].toString());
-              }
+        try {
+          final despachosBackend = await DespachoService.obtenerPorIncidente(
+            idIncidente,
+            incluirFinalizados: true,
+          );
+          if (despachosBackend.isNotEmpty) {
+            _despachosActivos = despachosBackend;
+            final nuevoPaso = _calcularPasoDesdeResumen(resumenDespachosVictimas, _pasoIncidente);
+            if (nuevoPaso != _pasoIncidente) {
+              _pasoIncidente = nuevoPaso;
             }
-          }
-        }
-      }
-    }
-
-    // 5. Detección desde último estado del incidente si existe
-    if (_incidenteActual.ultimoEstadoRel != null) {
-      final uRel = _incidenteActual.ultimoEstadoRel!;
-      final estRel = uRel['estadoRel'] ?? uRel['estado_rel'];
-      if (estRel is Map && estRel['descripcion'] != null) {
-        estadosDetectados.add(estRel['descripcion'].toString());
-      }
-    }
-
-    // 6. Demanda en estado 6 (Despachado)
-    if (_demandaActual.idCfgEstado == 6) {
-      estadosDetectados.add('Despachado');
-    }
-
-    pasoCalculado = _calcularPasoDesdeEstados(estadosDetectados, pasoCalculado);
-    _pasoIncidente = pasoCalculado;
-    notifyListeners();
-
-    // 5. Consulta asíncrona de despachos en backend en tiempo real
-    if (idIncidente != null) {
-      try {
-        final despachosBackend = await DespachoService.obtenerPorIncidente(idIncidente);
-        _despachosActivos = despachosBackend;
-
-        if (despachosBackend.isNotEmpty) {
-          for (var d in despachosBackend) {
-            estadosDetectados.add('Despachado');
-            if (d['movilunidad'] is Map && d['movilunidad']['movil'] is Map) {
-              final mData = d['movilunidad']['movil'];
-              if (mData['estado'] != null) {
-                estadosDetectados.add(mData['estado'].toString());
-              }
-            }
-          }
-          final nuevoPaso = _calcularPasoDesdeEstados(estadosDetectados, _pasoIncidente);
-          if (nuevoPaso != _pasoIncidente) {
-            _pasoIncidente = nuevoPaso;
             notifyListeners();
           }
+        } catch (e) {
+          debugPrint('[IngresoController] Error al verificar despachos del incidente: $e');
         }
-      } catch (e) {
-        debugPrint('[IngresoController] Error al verificar despachos del incidente: $e');
       }
-    }
     } finally {
       _isActualizandoPaso = false;
+      if (_pendingActualizarPaso) {
+        _pendingActualizarPaso = false;
+        actualizarPasoIncidente();
+      }
     }
   }
 
-  int _calcularPasoDesdeEstados(List<String> estados, int pasoBase) {
-    int maxPaso = pasoBase;
+  Future<void> marcarIncidenteCerrado(String reporte, {String? usuario}) async {
+    final repTrim = reporte.trim();
+    _incidenteActual = _incidenteActual.copyWith(
+      reporte: repTrim,
+      ultimoEstadoRel: {'estado': 7, 'idestado': 7},
+    );
+    _demandaActual = _demandaActual.copyWith(
+      idCfgEstado: 7,
+      incidente: _incidenteActual,
+    );
+    _pasoIncidente = 5;
+    await _guardarBorrador();
+    notifyListeners();
+  }
 
-    for (var est in estados) {
-      final e = est.trim().toLowerCase();
-      if (e == 'cierre' || e == 'cerrado') {
-        if (maxPaso < 5) maxPaso = 5;
-      } else if (e == 'fin' || e == 'finalizado' || e == 'arribado' || e == 'arribado destino' || e == 'base') {
-        if (maxPaso < 4) maxPaso = 4;
-      } else if (e == 'traslado' || e == 'en traslado' || e == 'en_traslado') {
-        if (maxPaso < 3) maxPaso = 3;
-      } else if (e == 'en sitio' || e == 'en_sitio' || e == 'en escena' || e == 'arribado escena' || e == 'arribado_escena') {
-        if (maxPaso < 2) maxPaso = 2;
-      } else if (e == 'despachado' || e == 'despacho' || e == 'en camino' || e == 'en_camino' || e == 'en transito' || e == 'asignado') {
-        if (maxPaso < 1) maxPaso = 1;
-      }
+  int _calcularPasoDesdeResumen(List<VictimaDespachoResumen> items, int pasoBase) {
+    // 1. Cierre administrativo
+    final tieneReporteCierre = _incidenteActual.reporte != null && _incidenteActual.reporte!.trim().isNotEmpty;
+    final ultimoEst = int.tryParse((_incidenteActual.ultimoEstadoRel?['estado'] ?? _incidenteActual.ultimoEstadoRel?['idestado'] ?? '').toString());
+    if (_incidenteActual.activo == 0 || _demandaActual.idCfgEstado == 7 || tieneReporteCierre || ultimoEst == 7) {
+      return 5; // Cierre
     }
-    return maxPaso;
+    if (_demandaActual.idCfgEstado == 8) {
+      return 4; // Fin
+    }
+
+    // 2. Si no hay despachos asignados
+    final conDespacho = items.where((i) => i.paso > 0).toList();
+    if (conDespacho.isEmpty) {
+      if (_demandaActual.idCfgEstado == 6) {
+        return 1; // Despacho
+      }
+      return math.max(0, pasoBase);
+    }
+
+    // 3. ¿Todos los asignados finalizaron?
+    final todosFinalizados = conDespacho.every((i) => i.isFinalizado || i.paso >= 4);
+    final hayVictimasSinDespacho = items.any((i) => i.paso == 0);
+
+    // Fin: Únicamente si TODOS los móviles asignados finalizaron y no quedan víctimas desatendidas
+    if (todosFinalizados && !hayVictimasSinDespacho) {
+      return 4;
+    }
+
+    // 4. Si hay móviles activos en curso, el paso global es el más avanzado entre los ACTIVOS
+    final activos = conDespacho.where((i) => !i.isFinalizado && i.paso < 4).toList();
+    if (activos.isNotEmpty) {
+      final maxActivo = activos.map((i) => i.paso).reduce(math.max);
+      return maxActivo;
+    }
+
+    if (hayVictimasSinDespacho) {
+      return 1; // Vuelve a requerir despacho para las demás víctimas
+    }
+
+    return 4;
   }
 }

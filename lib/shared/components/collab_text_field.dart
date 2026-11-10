@@ -135,11 +135,12 @@ class _CollabTextFieldState extends State<CollabTextField> {
     return ValueListenableBuilder<Map<String, dynamic>>(
       valueListenable: SocketService().lockedFields,
       builder: (context, locks, child) {
-        final bool isLocked = widget.isCollaborative && locks.containsKey(widget.fieldId);
+        final bool isLocked = widget.isCollaborative && SocketService().isFieldLockedByOther(widget.fieldId);
         String lockedByName = "";
 
         if (isLocked) {
-          lockedByName = locks[widget.fieldId]['nombre'] ?? 'Otro usuario';
+          final lockInfo = locks[widget.fieldId];
+          lockedByName = lockInfo is Map ? (lockInfo['nombre'] ?? 'Otro usuario') : lockInfo.toString();
         }
 
         return Stack(
