@@ -2,13 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../shared/models/victima_data.dart';
 import '../../../shared/models/sintoma.dart';
-import '../../../shared/models/sintoma_formulario.dart';
-import '../../../shared/models/sintoma_pregunta.dart';
 import '../../../shared/services/victima_sintomas_service.dart';
 import '../../../shared/services/socket_service.dart';
 import '../../ingreso/controllers/ingreso_controller.dart';
 import 'sintoma_search_panel.dart';
-import 'sintoma_form_panel.dart';
 import 'asistente_sintomas_panel.dart';
 
 class VictimaSintomasSection extends StatefulWidget {
@@ -34,12 +31,6 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
   int _modoSeleccion = 0;
 
   Sintoma? _sintomaSeleccionado;
-  SintomaFormulario? _formulario;
-  bool _isLoadingForm = false;
-  String? _errorMessage;
-
-  // Respuestas locales asociadas a preguntas: Map<idPregunta, valor>
-  final Map<int, dynamic> _respuestas = {};
 
   @override
   void initState() {
@@ -68,7 +59,8 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
         Sintoma? found;
         for (var s in list) {
           if ((widget.victima.idSintomaSeleccionadoId != null && s.id == widget.victima.idSintomaSeleccionadoId) ||
-              s.nombre == selectedName) {
+              s.nombre == selectedName ||
+              '${s.codigo} - ${s.nombre}' == selectedName) {
             found = s;
             break;
           }
@@ -83,25 +75,14 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
   Future<void> _restablecerSintomaSeleccionadoSinSync(Sintoma sintoma) async {
     setState(() {
       _sintomaSeleccionado = sintoma;
-      _formulario = null;
-      _isLoadingForm = true;
-      _errorMessage = null;
       widget.victima.idSintomaSeleccionadoId = sintoma.id;
     });
-
-    final form = await VictimaSintomasService.obtenerFormularioSintoma(sintoma.id);
-    if (mounted) {
-      setState(() {
-        _formulario = form;
-        _isLoadingForm = false;
-      });
-    }
   }
 
   bool get _isCurrentVictimaLocked {
     final bool isCollaborative = _ingresoController.incidenteActual.idIncidente != null;
     final lockKey = 'victima_${widget.index}';
-    return isCollaborative && SocketService().lockedFields.value.containsKey(lockKey);
+    return isCollaborative && SocketService().isFieldLockedByOther(lockKey);
   }
 
   Future<void> _onSintomaSelected(Sintoma sintoma) async {
@@ -112,10 +93,6 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
     if (_sintomaSeleccionado?.id == sintoma.id) {
       setState(() {
         _sintomaSeleccionado = null;
-        _formulario = null;
-        _isLoadingForm = false;
-        _errorMessage = null;
-        _respuestas.clear();
         widget.victima.idSintomaSeleccionadoId = null;
         widget.victima.idVictimaSintomaActivo = null;
       });
@@ -125,10 +102,6 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
 
     setState(() {
       _sintomaSeleccionado = sintoma;
-      _formulario = null;
-      _isLoadingForm = true;
-      _errorMessage = null;
-      _respuestas.clear();
       widget.victima.idSintomaSeleccionadoId = sintoma.id;
     });
 
@@ -140,7 +113,7 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
     final colorTriageBase = sintoma.codigoColor?.toUpperCase() == 'ROJO'
         ? 'Rojo'
         : (sintoma.codigoColor?.toUpperCase() == 'AMARILLO' ? 'Amarillo' : 'Verde');
-    _handleTriageSelected(colorTriageBase, mostrarNotificacion: true);
+    _handleTriageSelected(colorTriageBase);
 
     // 2. Persistir o recuperar la evaluación activa si ya hay un idVictima asignado
     const userHandle = 'mdarroux';
@@ -167,32 +140,19 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
         widget.victima.idVictimaSintomaActivo = vsId;
       }
     }
-
-    // 4. Cargar la estructura del formulario dinámico
-    final form = await VictimaSintomasService.obtenerFormularioSintoma(sintoma.id);
-
-    if (mounted) {
-      setState(() {
-        _formulario = form;
-        _isLoadingForm = false;
-        if (form == null) {
-          _errorMessage = 'No se pudo cargar la asistencia para este síntoma.';
-        }
-      });
-    }
   }
 
   void _handleAsignarFichaDesdeAsistente(Sintoma sintoma, String triage) {
     if (_isCurrentVictimaLocked) return;
     _ingresoController.lockVictima(widget.index);
     _onSintomaSelected(sintoma);
-    _handleTriageSelected(triage, mostrarNotificacion: true);
+    _handleTriageSelected(triage);
     setState(() {
       _modoSeleccion = 0; // Conmutar automáticamente a la ficha directa asignada
     });
   }
 
-  void _handleTriageSelected(String color, {bool mostrarNotificacion = true}) {
+  void _handleTriageSelected(String color) {
     if (_isCurrentVictimaLocked) return;
     _ingresoController.lockVictima(widget.index);
     setState(() {
@@ -207,60 +167,6 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
       _ingresoController.updateIncidente(codigoTriage: 'Amarillo', idConfCodigo: 30);
     } else if (color.toLowerCase() == 'verde' && incTriage != 'rojo' && incTriage != 'amarillo') {
       _ingresoController.updateIncidente(codigoTriage: 'Verde', idConfCodigo: 31);
-    }
-
-    if (mostrarNotificacion && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                color.toLowerCase() == 'rojo'
-                    ? Icons.emergency
-                    : (color.toLowerCase() == 'amarillo' ? Icons.warning_amber_rounded : Icons.check_circle_rounded),
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Text('Triage asignado a Víctima #${widget.index + 1}: $color'),
-            ],
-          ),
-          backgroundColor: color.toLowerCase() == 'rojo'
-              ? Colors.red.shade700
-              : (color.toLowerCase() == 'amarillo' ? Colors.amber.shade900 : Colors.green.shade700),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  Future<void> _handleRespuestaChanged(SintomaPregunta pregunta, dynamic valor) async {
-    if (_isCurrentVictimaLocked) return;
-    _ingresoController.lockVictima(widget.index);
-    setState(() {
-      _respuestas[pregunta.id] = valor;
-    });
-
-    const userHandle = 'mdarroux';
-
-    // Persistir incrementalmente en backend si la evaluación y el síntoma están registrados
-    if (widget.victima.idVictimaEvaluacion != null &&
-        widget.victima.idVictimaSintomaActivo != null) {
-      
-      int? opcionId;
-      if (pregunta.tipo == 'SINGLE_OPTION' && valor is int) {
-        opcionId = valor;
-      }
-
-      await VictimaSintomasService.guardarRespuesta(
-        idEvaluacion: widget.victima.idVictimaEvaluacion!,
-        idVictimaSintoma: widget.victima.idVictimaSintomaActivo!,
-        idSintomaPregunta: pregunta.id,
-        idSintomaPreguntaOpcion: opcionId,
-        valor: valor,
-        usuario: userHandle,
-      );
     }
   }
 
@@ -377,10 +283,12 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
     return ValueListenableBuilder<Map<String, dynamic>>(
       valueListenable: SocketService().lockedFields,
       builder: (context, locks, _) {
-        final bool isLocked = isCollaborative && locks.containsKey(lockKey);
+        final lockKey = 'victima_${widget.index}';
+        final bool isLocked = isCollaborative && SocketService().isFieldLockedByOther(lockKey);
         String lockedByName = '';
         if (isLocked) {
-          lockedByName = locks[lockKey]['nombre'] ?? 'Otro usuario';
+          final lockInfo = locks[lockKey];
+          lockedByName = lockInfo is Map ? (lockInfo['nombre'] ?? 'Otro usuario') : lockInfo.toString();
         }
 
         return Focus(
@@ -436,7 +344,7 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
                         // 1. Selector Superior de Modalidad (Directa vs Asistente)
                         _buildModoSelector(),
 
-                        // 2. Contenido según la modalidad activa con altura acotada y scroll interno
+                        // 2. Contenido a ancho completo sin panel derecho
                         Expanded(
                           child: _modoSeleccion == 1
                               ? AsistenteSintomasPanel(
@@ -444,73 +352,11 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
                                   sintomaActual: _sintomaSeleccionado,
                                   onAsignarFicha: _handleAsignarFichaDesdeAsistente,
                                 )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final isWide = constraints.maxWidth >= 600;
-
-                                    if (isWide) {
-                                      return Row(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          // Columna Izquierda: Buscador + Fichas de Despacho (50%)
-                                          Expanded(
-                                            flex: 1,
-                                            child: SintomaSearchPanel(
-                                              sintomas: _sintomas,
-                                              sintomaSeleccionado: _sintomaSeleccionado,
-                                              isLoading: _isLoadingSymptoms,
-                                              onSintomaSelected: _onSintomaSelected,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          // Columna Derecha: Formulario Dinámico de Asistencia (50%)
-                                          Expanded(
-                                            flex: 1,
-                                            child: SintomaFormPanel(
-                                              sintomaSeleccionado: _sintomaSeleccionado,
-                                              formulario: _formulario,
-                                              isLoadingForm: _isLoadingForm,
-                                              errorMessage: _errorMessage,
-                                              respuestas: _respuestas,
-                                              onRespuestaChanged: _handleRespuestaChanged,
-                                              onTriageSelected: (c) => _handleTriageSelected(c),
-                                              triageActual: widget.victima.codigoTriage,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    } else {
-                                      // Diseño apilado para pantallas reducidas
-                                      return SingleChildScrollView(
-                                        physics: const BouncingScrollPhysics(),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                                          children: [
-                                            SizedBox(
-                                              height: 380,
-                                              child: SintomaSearchPanel(
-                                                sintomas: _sintomas,
-                                                sintomaSeleccionado: _sintomaSeleccionado,
-                                                isLoading: _isLoadingSymptoms,
-                                                onSintomaSelected: _onSintomaSelected,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 16),
-                                            SintomaFormPanel(
-                                              sintomaSeleccionado: _sintomaSeleccionado,
-                                              formulario: _formulario,
-                                              isLoadingForm: _isLoadingForm,
-                                              errorMessage: _errorMessage,
-                                              respuestas: _respuestas,
-                                              onRespuestaChanged: _handleRespuestaChanged,
-                                              onTriageSelected: (c) => _handleTriageSelected(c),
-                                              triageActual: widget.victima.codigoTriage,
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }
-                                  },
+                              : SintomaSearchPanel(
+                                  sintomas: _sintomas,
+                                  sintomaSeleccionado: _sintomaSeleccionado,
+                                  isLoading: _isLoadingSymptoms,
+                                  onSintomaSelected: _onSintomaSelected,
                                 ),
                         ),
                       ],
@@ -590,4 +436,3 @@ class _VictimaSintomasSectionState extends State<VictimaSintomasSection> {
     );
   }
 }
-

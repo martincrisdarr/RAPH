@@ -77,7 +77,87 @@ class _ResumenVictimasSectionState extends State<ResumenVictimasSection> {
     );
   }
 
+  Map<String, dynamic>? _obtenerDespachoDeVictima(VictimaData victima, int index) {
+    final despachos = _ingresoController.despachosActivos;
+    if (despachos.isEmpty) return null;
+
+    if (victima.idVictima != null) {
+      for (final d in despachos.reversed) {
+        final dVic = int.tryParse(d['idvictima']?.toString() ?? '');
+        if (dVic == victima.idVictima) {
+          return d;
+        }
+      }
+    }
+    if (victima.idMovilAsignado != null && victima.idMovilAsignado!.isNotEmpty) {
+      for (final d in despachos.reversed) {
+        final dM = (d['idmovil'] ?? d['idmovilunidad'])?.toString();
+        if (dM == victima.idMovilAsignado) {
+          return d;
+        }
+      }
+    }
+    // Si solo hay 1 víctima y un despacho sin idvictima explícito (ej. Código Rojo), asociarlo visualmente
+    if (_ingresoController.victimas.length == 1 && index == 1) {
+      return despachos.last;
+    }
+    return null;
+  }
+
+  String _formatearEstadoOperativo(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'en_camino':
+      case 'en camino':
+        return 'En Camino';
+      case 'en_sitio':
+      case 'en sitio':
+        return 'En Sitio';
+      case 'traslado':
+      case 'en_traslado':
+        return 'En Traslado';
+      case 'en_hospital':
+      case 'finalizado':
+        return 'Finalizado';
+      default:
+        return 'Despachado';
+    }
+  }
+
+  Color _colorEstadoOperativo(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'en_sitio':
+      case 'en sitio':
+        return const Color(0xFF06B6D4); // Cyan
+      case 'traslado':
+      case 'en_traslado':
+        return const Color(0xFFA855F7); // Violeta
+      case 'en_hospital':
+      case 'finalizado':
+        return const Color(0xFF10B981); // Verde
+      default:
+        return const Color(0xFFFF9800); // Naranja Despachado / En camino
+    }
+  }
+
   Widget _buildVictimaTile(ThemeData theme, int number, VictimaData victima) {
+    final despacho = _obtenerDespachoDeVictima(victima, number);
+    String? movilNombre;
+    String? estadoOp;
+    String? hospitalNombre;
+
+    if (despacho != null) {
+      estadoOp = (despacho['estado_operativo'] ?? 'despachado').toString();
+      hospitalNombre = despacho['hospital_nombre']?.toString();
+      if (despacho['movilunidad'] is Map) {
+        final mu = despacho['movilunidad'] as Map;
+        if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+          movilNombre = mu['movil']['nombre'].toString();
+        } else if (mu['patente'] != null) {
+          movilNombre = 'Unidad ${mu['patente']}';
+        }
+      }
+      movilNombre ??= 'Móvil asignado';
+    }
     final triageVictima = victima.codigoTriage?.trim();
     final triageIncidente = _ingresoController.incidenteActual.codigoTriage?.trim();
     final idConfCodigoIncidente = _ingresoController.incidenteActual.idConfCodigo;
@@ -184,6 +264,141 @@ class _ResumenVictimasSectionState extends State<ResumenVictimasSection> {
                     fontSize: 13,
                     fontStyle: FontStyle.italic,
                     color: Colors.white70,
+                  ),
+                ),
+              ],
+              if (movilNombre != null && estadoOp != null) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _colorEstadoOperativo(estadoOp).withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _colorEstadoOperativo(estadoOp).withOpacity(0.45),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.local_shipping_rounded,
+                            size: 13,
+                            color: _colorEstadoOperativo(estadoOp),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '$movilNombre • ${_formatearEstadoOperativo(estadoOp)}',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: _colorEstadoOperativo(estadoOp),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hospitalNombre != null && hospitalNombre.trim().isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00E5FF).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF00E5FF).withOpacity(0.35),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.local_hospital_rounded,
+                              size: 13,
+                              color: Color(0xFF00E5FF),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              hospitalNombre,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF00E5FF),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              if (victima.isCerrada) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.verified_rounded, size: 13, color: Color(0xFF10B981)),
+                          SizedBox(width: 5),
+                          Text(
+                            'CIERRE DE VÍCTIMA COMPLETADO',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF10B981),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        victima.reporte ?? '',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (_ingresoController.isVictimaAtencionFinalizada(number - 1)) ...[
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () {
+                    _ingresoController.selectedVictimaIndex = number - 1;
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.amberAccent.withOpacity(0.4)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.pending_actions_rounded, size: 13, color: Colors.amberAccent),
+                        SizedBox(width: 5),
+                        Text(
+                          'Pendiente de cierre individual',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amberAccent,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

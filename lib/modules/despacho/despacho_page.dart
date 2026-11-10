@@ -11,6 +11,7 @@ import '../../shared/models/incidente.dart';
 import '../../shared/models/victima.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import '../../shared/services/despacho_service.dart';
+import '../../shared/services/socket_service.dart';
 import '../../shared/widgets/app_toast.dart';
 import '../../shared/widgets/confirm_cancel_dispatch_dialog.dart';
 import 'controllers/despacho_controller.dart';
@@ -261,13 +262,60 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
     }
   }
   
+  void Function(String)? _despachoSocketListener;
+
   @override
+  void _validarSeleccionIncidente() {
+    if (!mounted) return;
+    if (_controller.incidentesActivos.isEmpty) {
+      if (_selectedIncident != null) {
+        setState(() {
+          _selectedIncident = null;
+        });
+      }
+      return;
+    }
+    if (_selectedIncident != null) {
+      final curId = _selectedIncident?.incidente?.idIncidente ?? _selectedIncident?.idDemandaRecibida;
+      final stillExists = _controller.incidentesActivos.any((d) =>
+          (d.incidente?.idIncidente ?? d.idDemandaRecibida) == curId);
+      if (!stillExists) {
+        setState(() {
+          _selectedIncident = _controller.incidentesActivos.first;
+        });
+        final nextId = _selectedIncident?.incidente?.idIncidente ?? _selectedIncident?.idDemandaRecibida;
+        if (nextId != null) {
+          _cargarDespachosDeIncidente(nextId);
+        }
+      }
+    } else {
+      setState(() {
+        _selectedIncident = _controller.incidentesActivos.first;
+      });
+      final nextId = _selectedIncident?.incidente?.idIncidente ?? _selectedIncident?.idDemandaRecibida;
+      if (nextId != null) {
+        _cargarDespachosDeIncidente(nextId);
+      }
+    }
+  }
+
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
-    _controller.inicializar();
+    _controller.inicializar().then((_) { if (mounted) _validarSeleccionIncidente(); });
     _iniciarPollingIncidentes();
+    _despachoSocketListener = (_) {
+      if (mounted) {
+        _controller.cargarIncidentesActivos();
+        _controller.cargarMoviles();
+        final idIncSel = _selectedIncident?.incidente?.idIncidente ?? _selectedIncident?.idDemandaRecibida;
+        if (idIncSel != null && !_isLoadingDespachos) {
+          _cargarDespachosDeIncidente(idIncSel);
+        }
+      }
+    };
+    SocketService().registerFieldListener('despacho_actualizado', _despachoSocketListener!);
   }
 
   void _onTabChanged() {
@@ -288,18 +336,22 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
         timer.cancel();
         return;
       }
-      if (_tabController.index == 0 && _selectedIncident == null) {
-        _controller.cargarIncidentesActivos();
-      }
-      // Actualizar móviles activos y sus ubicaciones GPS en vivo
       if (_tabController.index == 0) {
+        _controller.cargarIncidentesActivos();
         _controller.cargarMoviles();
+        final idIncSel = _selectedIncident?.incidente?.idIncidente ?? _selectedIncident?.idDemandaRecibida;
+        if (idIncSel != null && !_isLoadingDespachos) {
+          _cargarDespachosDeIncidente(idIncSel);
+        }
       }
     });
   }
 
   @override
   void dispose() {
+    if (_despachoSocketListener != null) {
+      SocketService().unregisterFieldListener('despacho_actualizado', _despachoSocketListener!);
+    }
     _incidentesTimer?.cancel();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
@@ -1456,7 +1508,8 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
     for (var d in _despachosIncidentActivo) {
       final act = d['activo'];
       final isActivo = act == 1 || act == '1' || act == true;
-      final noCerrado = d['fechahoracierre'] == null || d['fechahoracierre'].toString().trim().isEmpty;
+      final rawEst = (d['estado_operativo'] ?? '').toString().toLowerCase().trim();
+      final noCerrado = (d['fechahoracierre'] == null || d['fechahoracierre'].toString().trim().isEmpty) && rawEst != 'cancelado' && rawEst != 'finalizado' && rawEst != 'en_hospital';
       if (!isActivo || !noCerrado) continue;
 
       String? dMId;
@@ -1510,25 +1563,55 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
       }
     }
 
-    // Obtener IDs de móviles ya asignados a alguna víctima en cualquier incidente activo
-    final assignedMobileIds = _controller.incidentesActivos
-        .expand((d) => d.incidente?.victimas ?? <Victima>[])
-        .expand((v) => v.idMovilAsignado?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? <String>[])
-        .toSet();
+    // Obtener IDs de móviles con despacho ACTIVO en cualquier incidente
+    final activeAssignedMobileIds = <String>{};
+    for (final d in _controller.incidentesActivos) {
+      final inc = d.incidente;
+      if (inc?.despachos != null) {
+        for (final desp in inc!.despachos!) {
+          if (desp is Map) {
+            final act = desp['activo'];
+            final rawEst = (desp['estado_operativo'] ?? '').toString().trim().toLowerCase();
+            final isFin = rawEst == 'finalizado' || rawEst == 'en_hospital' || rawEst == 'base' || ((act == 0 || act == '0' || act == false) && rawEst != 'cancelado');
+            if ((act == 1 || act == '1' || act == true) && !isFin) {
+              String? idM;
+              if (desp['movilunidad'] is Map) {
+                final mu = desp['movilunidad'] as Map;
+                idM = (mu['idmovil'] ?? (mu['movil'] is Map ? mu['movil']['idmovil'] : null))?.toString();
+              }
+              idM ??= desp['idmovil']?.toString();
+              if (idM != null && idM.isNotEmpty) {
+                activeAssignedMobileIds.add(idM);
+                final clean = idM.replaceAll(RegExp(r'[^0-9]'), '');
+                if (clean.isNotEmpty) activeAssignedMobileIds.add(clean);
+              }
+            }
+          }
+        }
+      }
+    }
 
-    // Obtener móviles disponibles para despachar (idmovil_estado == 1 o "Disponible", activos y no asignados)
+    // Obtener móviles disponibles para despachar (no asignados activamente y disponibles/operativos)
     final despachables = _controller.moviles.where((m) {
       if (m.activo == 0) return false;
-      final esDisponible = m.idmovilEstado == 1 || m.estado.toLowerCase() == 'disponible';
-      if (!esDisponible) return false;
       
       final cleanId = m.id.replaceAll(RegExp(r'[^0-9]'), '');
-      if (assignedMobileIds.contains(m.id) || (cleanId.isNotEmpty && assignedMobileIds.contains(cleanId))) {
+      if (activeAssignedMobileIds.contains(m.id) || (cleanId.isNotEmpty && activeAssignedMobileIds.contains(cleanId))) {
         return false;
       }
       if (idsAsignadosAEsteIncidente.contains(m.id) || (cleanId.isNotEmpty && idsAsignadosAEsteIncidente.contains(cleanId))) {
         return false;
       }
+
+      final estLower = m.estado.toLowerCase().trim();
+      final esDisponible = m.idmovilEstado == 1 ||
+          m.idmovilEstado == 2 ||
+          estLower == 'disponible' ||
+          estLower == 'operativo' ||
+          estLower == 'base' ||
+          estLower == 'finalizado';
+      if (!esDisponible) return false;
+
       return true;
     }).toList();
 
@@ -2002,10 +2085,71 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
             ]
             else
               ...victimas.map((v) {
-                final assignedId = v.idMovilAsignado != null && v.idMovilAsignado!.isNotEmpty
-                    ? v.idMovilAsignado!.trim()
-                    : null;
-                final isAssigned = assignedId != null && assignedId.isNotEmpty;
+                // 1. Buscar en los despachos del incidente si existe un despacho activo o finalizado para esta víctima
+                Map<String, dynamic>? activeDespachoDeVictima;
+                Map<String, dynamic>? finalizadoDespachoDeVictima;
+
+                final allDespachos = <Map<String, dynamic>>[..._despachosIncidentActivo];
+                if (inc.despachos != null) {
+                  for (final d in inc.despachos!) {
+                    if (d is Map) {
+                      final mapD = Map<String, dynamic>.from(d);
+                      if (!allDespachos.any((x) => x['iddespacho']?.toString() == mapD['iddespacho']?.toString())) {
+                        allDespachos.add(mapD);
+                      }
+                    }
+                  }
+                }
+
+                for (final d in allDespachos) {
+                  final dVic = int.tryParse(d['idvictima']?.toString() ?? '');
+                  if (v.idVictima == null || dVic != v.idVictima) continue;
+
+                  final act = d['activo'];
+                  final rawEst = (d['estado_operativo'] ?? '').toString().toLowerCase().trim();
+                  if (act == 2 || act == '2' || rawEst == 'cancelado') continue;
+
+                  final isFin = rawEst == 'finalizado' ||
+                      rawEst == 'en_hospital' ||
+                      rawEst == 'arribado' ||
+                      rawEst == 'base' ||
+                      ((act == 0 || act == '0' || act == false) && rawEst != 'cancelado');
+
+                  if (isFin) {
+                    finalizadoDespachoDeVictima = d;
+                  } else if (act == 1 || act == '1' || act == true) {
+                    activeDespachoDeVictima = d;
+                    break;
+                  }
+                }
+
+                final bool isFinalizada = activeDespachoDeVictima == null && finalizadoDespachoDeVictima != null;
+
+                // 2. Determinar el ID del móvil si hay asignación activa
+                String? assignedId;
+                if (!isFinalizada && activeDespachoDeVictima != null) {
+                  final dM = (activeDespachoDeVictima['movil']?['idmovil'] ??
+                              activeDespachoDeVictima['movilunidad']?['idmovil'] ??
+                              activeDespachoDeVictima['idmovilunidad'])?.toString();
+                  if (dM != null && dM.isNotEmpty) {
+                    assignedId = dM.trim();
+                  }
+                }
+
+                // Fallback con v.idMovilAsignado solo si no está finalizada ni cancelada
+                if (!isFinalizada && assignedId == null && v.idMovilAsignado != null && v.idMovilAsignado!.isNotEmpty) {
+                  final tieneCanceladoOFin = allDespachos.any((d) {
+                    final dVic = int.tryParse(d['idvictima']?.toString() ?? '');
+                    final act = d['activo'];
+                    final rawEst = (d['estado_operativo'] ?? '').toString().toLowerCase().trim();
+                    return dVic == v.idVictima && (act == 2 || act == '2' || act == 0 || act == '0' || rawEst == 'cancelado' || rawEst == 'finalizado' || rawEst == 'en_hospital');
+                  });
+                  if (!tieneCanceladoOFin) {
+                    assignedId = v.idMovilAsignado!.trim();
+                  }
+                }
+
+                final isAssigned = !isFinalizada && assignedId != null && assignedId.isNotEmpty;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -2014,7 +2158,9 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                     color: Colors.white.withOpacity(0.02),
                     borderRadius: BorderRadius.circular(AppRadii.md),
                     border: Border.all(
-                      color: isAssigned ? AppColors.accentBlue.withOpacity(0.3) : AppColors.border,
+                      color: isFinalizada
+                          ? const Color(0xFF10B981).withOpacity(0.35)
+                          : (isAssigned ? AppColors.accentBlue.withOpacity(0.3) : AppColors.border),
                       width: 1,
                     ),
                   ),
@@ -2081,7 +2227,7 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                       if (isAssigned) ...[
                         Builder(
                           builder: (context) {
-                            final cleanAssigned = assignedId.replaceAll(RegExp(r'[^0-9]'), '');
+                            final cleanAssigned = (assignedId ?? '').replaceAll(RegExp(r'[^0-9]'), '');
                             final mIndex = _controller.moviles.indexWhere((m) {
                               final cleanM = m.id.replaceAll(RegExp(r'[^0-9]'), '');
                               return m.id == assignedId || (cleanM.isNotEmpty && cleanM == cleanAssigned);
@@ -2091,6 +2237,26 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                             
                             final uIndex = _controller.unidades.indexWhere((u) => u.id == movilAsignado.idUnidadAsignada);
                             final unidadAsignada = uIndex != -1 ? _controller.unidades[uIndex] : null;
+
+                            final despachoDeVictima = activeDespachoDeVictima;
+
+                            final String rawEstOp = (despachoDeVictima?['estado_operativo'] ?? movilAsignado.estado).toString().toLowerCase();
+                            String estadoDisplay = movilAsignado.estado.toUpperCase();
+                            Color estadoColor = _getMovilStatusColor(movilAsignado.estado);
+                            if (rawEstOp == 'en_sitio' || rawEstOp == 'en sitio') {
+                              estadoDisplay = 'EN SITIO';
+                              estadoColor = _getMovilStatusColor('En sitio');
+                            } else if (rawEstOp == 'traslado' || rawEstOp == 'en_traslado') {
+                              estadoDisplay = 'EN TRASLADO';
+                              estadoColor = _getMovilStatusColor('Traslado');
+                            } else if (rawEstOp == 'en_camino' || rawEstOp == 'en camino') {
+                              estadoDisplay = 'EN CAMINO';
+                              estadoColor = _getMovilStatusColor('Despachado');
+                            } else if (rawEstOp == 'despachado') {
+                              estadoDisplay = 'DESPACHADO';
+                              estadoColor = _getMovilStatusColor('Despachado');
+                            }
+                            final String? hospitalDestino = despachoDeVictima?['hospital_nombre']?.toString();
                             
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
@@ -2126,17 +2292,17 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
-                                              color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)).withOpacity(0.15),
+                                              color: estadoColor.withOpacity(0.15),
                                               borderRadius: BorderRadius.circular(AppRadii.xs),
                                               border: Border.all(
-                                                color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)).withOpacity(0.3),
-                                                width: 0.5,
+                                                color: estadoColor.withOpacity(0.4),
+                                                width: 0.8,
                                               ),
                                             ),
                                             child: Text(
-                                              movilAsignado.estado.toUpperCase(),
+                                              estadoDisplay,
                                               style: TextStyle(
-                                                color: _getCategoriaColor(_getCategoriaEstado(movilAsignado.estado)),
+                                                color: estadoColor,
                                                 fontSize: 9,
                                                 fontWeight: FontWeight.bold,
                                               ),
@@ -2165,25 +2331,33 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                                               );
                                               if (confirmar != true) return;
 
+                                              final dId = v.idDespacho ?? (activeDespachoDeVictima != null ? int.tryParse(activeDespachoDeVictima['iddespacho']?.toString() ?? '') : null);
                                               await _controller.removerMovilDeVictima(
                                                 idIncidenteActual,
                                                 v.idVictima!,
                                                 movilAsignado.id,
-                                                idDespacho: v.idDespacho,
+                                                idDespacho: dId,
                                               );
                                               await _cargarDespachosDeIncidente(idIncidenteActual);
                                               await _controller.cargarIncidentesActivos();
                                               await _controller.cargarMoviles();
 
-                                              if (context.mounted) {
+                                              if (mounted) {
+                                                setState(() {
+                                                  final updated = _controller.incidentesActivos.firstWhere(
+                                                    (element) => element.incidente?.idIncidente == idIncidenteActual || element.idDemandaRecibida == idIncidenteActual,
+                                                    orElse: () => _selectedIncident!,
+                                                  );
+                                                  _selectedIncident = updated;
+                                                });
                                                 AppToast.show(
                                                   context,
                                                   title: 'Despacho Cancelado',
-                                                  message: 'Se canceló el despacho del ${movilAsignado.nombre} para la víctima.',
+                                                  message: 'Se canceló el despacho del ' + movilAsignado.nombre + ' para la víctima.',
                                                   type: ToastType.cancelado,
                                                 );
                                               }
-                                            },
+                                              },
                                           ),
                                         ],
                                       ),
@@ -2196,6 +2370,116 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                                           ? 'Vehículo: ${unidadAsignada.marca} (${unidadAsignada.patente}) • Tipo: ${unidadAsignada.tipo}'
                                           : 'Vehículo: ${movilAsignado.marca ?? ""} (${movilAsignado.patente})'.trim(),
                                       style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                    ),
+                                  ],
+                                  if (hospitalDestino != null && hospitalDestino.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.local_hospital_rounded, size: 13, color: Color(0xFF00E5FF)),
+                                        const SizedBox(width: 5),
+                                        Expanded(
+                                          child: Text(
+                                            'Destino: $hospitalDestino',
+                                            style: const TextStyle(
+                                              color: Color(0xFF00E5FF),
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ] else if (isFinalizada) ...[
+                        Builder(
+                          builder: (context) {
+                            final dFin = finalizadoDespachoDeVictima!;
+                            String movilNombre = 'Móvil';
+                            if (dFin['movil'] is Map && dFin['movil']['nombre'] != null) {
+                              movilNombre = dFin['movil']['nombre'].toString();
+                            } else if (dFin['movilunidad'] is Map) {
+                              final mu = dFin['movilunidad'] as Map;
+                              if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+                                movilNombre = mu['movil']['nombre'].toString();
+                              } else if (mu['idmovil'] != null) {
+                                movilNombre = 'Móvil ' + mu['idmovil'].toString();
+                              }
+                            } else if (dFin['idmovil'] != null) {
+                              movilNombre = 'Móvil ' + dFin['idmovil'].toString();
+                            }
+                            final String? hospNombre = dFin['hospital_nombre']?.toString();
+
+                            return Container(
+                              padding: const EdgeInsets.all(10),
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(AppRadii.sm),
+                                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFF10B981)),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            movilNombre,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13.5,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withOpacity(0.18),
+                                          borderRadius: BorderRadius.circular(AppRadii.xs),
+                                          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.5), width: 0.8),
+                                        ),
+                                        child: const Text(
+                                          'FINALIZADO',
+                                          style: TextStyle(
+                                            color: Color(0xFF10B981),
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (hospNombre != null && hospNombre.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.local_hospital_rounded, size: 13, color: Color(0xFF00E5FF)),
+                                        const SizedBox(width: 5),
+                                        Expanded(
+                                          child: Text(
+                                            'Destino: ' + hospNombre,
+                                            style: const TextStyle(
+                                              color: Color(0xFF00E5FF),
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ],
@@ -2220,7 +2504,7 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                         ),
                       ],
                       const SizedBox(height: 10),
-                      if (!isAssigned) ...[
+                      if (!isAssigned && !isFinalizada) ...[
                         if (despachables.isEmpty) ...[
                           Row(
                             children: [
@@ -2324,14 +2608,21 @@ class _DespachoPageState extends State<DespachoPage> with SingleTickerProviderSt
                                     await _controller.cargarIncidentesActivos();
                                     await _controller.cargarMoviles();
                                     if (mounted) {
+                                      setState(() {
+                                        final updated = _controller.incidentesActivos.firstWhere(
+                                          (element) => element.incidente?.idIncidente == idIncidenteActual || element.idDemandaRecibida == idIncidenteActual,
+                                          orElse: () => _selectedIncident!,
+                                        );
+                                        _selectedIncident = updated;
+                                      });
                                       AppToast.show(
                                         context,
                                         title: 'Móvil Despachado',
-                                        message: 'Móvil ${m.nombre} asignado a ${v.nombresApellidos ?? "la víctima"}.',
+                                        message: 'Móvil ' + m.nombre + ' asignado a ' + (v.nombresApellidos ?? 'la víctima') + '.',
                                         type: ToastType.despacho,
                                       );
                                     }
-                                  },
+                                   },
                                   child: const Text(
                                     'DESPACHAR',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10),

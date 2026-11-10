@@ -342,15 +342,15 @@ class _UbicacionSectionState extends State<UbicacionSection> {
       zoomControlsEnabled: true,
       markers: markers,
       onMapCreated: (controller) => _mapController = controller,
-      onTap: _buscarDireccionPorCoordenadas,
     );
   }
 
   Future<void> _mostrarMapaGrandeDialog() async {
     final theme = Theme.of(context);
 
-    // Si hay texto escrito, buscamos en el mapa primero para centrar
-    if (_domicilioController.text.trim().isNotEmpty) {
+    // Solo geocodificar antes de abrir si aún no tiene coordenadas asignadas
+    if (_domicilioController.text.trim().isNotEmpty &&
+        _ingresoController.incidenteActual.latitud == null) {
       await _buscarDireccionEnMapa();
     }
 
@@ -442,15 +442,25 @@ class _UbicacionSectionState extends State<UbicacionSection> {
                                   )
                                 ],
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.touch_app_outlined, color: Colors.blueAccent, size: 20),
-                                  SizedBox(width: 12),
+                                  Icon(
+                                    _ingresoController.pasoIncidente >= 1
+                                        ? Icons.lock_outline_rounded
+                                        : Icons.touch_app_outlined,
+                                    color: _ingresoController.pasoIncidente >= 1
+                                        ? Colors.amberAccent
+                                        : Colors.blueAccent,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      'Hacé click o tocá en el mapa para ajustar la ubicación exacta en tiempo real.',
-                                      style: TextStyle(
+                                      _ingresoController.pasoIncidente >= 1
+                                          ? 'Ubicación fijada — El incidente ya cuenta con móviles despachados y su dirección no puede modificarse.'
+                                          : 'Hacé click o tocá en el mapa para ajustar la ubicación exacta en tiempo real.',
+                                      style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
@@ -544,12 +554,14 @@ class _UbicacionSectionState extends State<UbicacionSection> {
       mapToolbarEnabled: false,
       zoomControlsEnabled: true,
       markers: markers,
-      onTap: (coords) async {
-        await _buscarDireccionPorCoordenadas(coords);
-        if (mounted) {
-          setState(() {});
-        }
-      },
+      onTap: _ingresoController.pasoIncidente >= 1
+          ? null
+          : (coords) async {
+              await _buscarDireccionPorCoordenadas(coords);
+              if (mounted) {
+                setState(() {});
+              }
+            },
     );
   }
 
@@ -571,9 +583,14 @@ class _UbicacionSectionState extends State<UbicacionSection> {
               child: TextFormField(
                 controller: _domicilioController,
                 focusNode: _domicilioFocusNode,
+                readOnly: _ingresoController.pasoIncidente >= 1,
                 textCapitalization: TextCapitalization.words,
-                onChanged: (val) => _ingresoController.updateIncidente(direccion: val),
-                onFieldSubmitted: (_) => _buscarDireccionEnMapa(),
+                onChanged: _ingresoController.pasoIncidente >= 1
+                    ? null
+                    : (val) => _ingresoController.updateIncidente(direccion: val),
+                onFieldSubmitted: _ingresoController.pasoIncidente >= 1
+                    ? null
+                    : (_) => _buscarDireccionEnMapa(),
                 decoration: InputDecoration(
                   labelText: _isLinkMode ? 'Pegá el link de WhatsApp...' : 'Domicilio *',
                   labelStyle: TextStyle(

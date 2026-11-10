@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../shared/theme/app_theme_tokens.dart';
+import '../../shared/services/socket_service.dart';
 import '../ingreso/controllers/ingreso_controller.dart';
 import 'widgets/kanban_column.dart';
 import 'widgets/kanban_card.dart';
@@ -40,6 +41,7 @@ class ListadosPage extends StatefulWidget {
 class _ListadosPageState extends State<ListadosPage> {
   // Estado de carga y datos de API
   bool _isLoading = false;
+  bool _pendingReload = false;
   List<Map<String, dynamic>> _rawDemandas = [];
 
   // Estado del cursor global
@@ -52,10 +54,59 @@ class _ListadosPageState extends State<ListadosPage> {
   DateTime? _fechaDesde;
   DateTime? _fechaHasta;
 
+  void Function(String)? _despachoSocketListener;
+
   @override
   void initState() {
     super.initState();
     _cargarDatos();
+    _despachoSocketListener = (_) {
+      if (mounted) {
+        if (!_isLoading) {
+          _cargarDatos();
+        } else {
+          _pendingReload = true;
+        }
+      }
+    };
+    SocketService().registerFieldListener('despacho_actualizado', _despachoSocketListener!);
+  }
+
+  @override
+  void dispose() {
+    if (_despachoSocketListener != null) {
+      SocketService().unregisterFieldListener('despacho_actualizado', _despachoSocketListener!);
+    }
+    super.dispose();
+  }
+
+  String _mapearEstadoOperativoAKanban(Map d) {
+    final raw = (d['estado_operativo'] ?? '').toString().trim().toLowerCase();
+    final act = d['activo'];
+    if (raw == 'en_hospital' || raw == 'finalizado' || ((act == 0 || act == '0' || act == false) && raw != 'cancelado')) {
+      return 'Finalizado';
+    }
+    if (raw == 'en_sitio' || raw == 'en sitio') return 'En sitio';
+    if (raw == 'traslado' || raw == 'en_traslado') return 'Traslado';
+    return 'Despachado';
+  }
+
+  DateTime _obtenerTimestampCambioEstado(Map d) {
+    final candidatos = [
+      d['fechahora_hospital'],
+      d['fechahoracierre'],
+      d['fechahora_traslado'],
+      d['fechahora_ensitio'],
+      d['fechahoraconfirmacion'],
+      d['fechahoradespacho'],
+    ];
+    for (final c in candidatos) {
+      if (c != null && c.toString().trim().isNotEmpty) {
+        final parsed = DateTime.tryParse(c.toString());
+        if (parsed != null) return parsed;
+      }
+    }
+    return DateTime.now();
   }
 
   Future<void> _cargarDatos() async {
@@ -135,16 +186,23 @@ class _ListadosPageState extends State<ListadosPage> {
 
               bool tieneDespacho = false;
               if (v['despachos'] is List) {
-                // Filtrar solo los despachos ACTIVOS (activo == 1), ignorando cancelados (activo == 2) y eliminados (activo == 0)
-                final despachosActivos = (v['despachos'] as List).where((d) {
+                // Incluir despachos activos (activo == 1) o finalizados (activo == 0 con estado_operativo == finalizado), ignorando cancelados (activo == 2)
+                final despachosValidos = (v['despachos'] as List).where((d) {
                   if (d is! Map) return false;
                   final act = d['activo'];
-                  return act == 1 || act == '1' || act == true;
+                  final isAct = act == 1 || act == '1' || act == true;
+                  final isFin = (act == 0 || act == '0' || act == false) &&
+                      (d['estado_operativo']?.toString().toLowerCase() == 'finalizado');
+                  return isAct || isFin;
                 }).toList();
 
-                if (despachosActivos.isNotEmpty) {
-                  // Tomar el despacho activo más reciente para esta víctima
-                  final d = despachosActivos.last as Map;
+                if (despachosValidos.isNotEmpty) {
+                  // Priorizar despacho activo; si no hay activo, mostrar el último finalizado
+                  final activos = despachosValidos.where((d) {
+                    final act = (d as Map)['activo'];
+                    return act == 1 || act == '1' || act == true;
+                  }).toList();
+                  final d = (activos.isNotEmpty ? activos.last : despachosValidos.last) as Map;
                   tieneDespacho = true;
                   String mNombre = 'Móvil';
                   if (d['movilunidad'] is Map) {
@@ -158,13 +216,13 @@ class _ListadosPageState extends State<ListadosPage> {
                     }
                   }
                   moviles.add(MovilStatus(
+                    idDespacho: int.tryParse(d['iddespacho']?.toString() ?? ''),
                     nombre: mNombre,
-                    status: 'Despachado',
+                    status: _mapearEstadoOperativoAKanban(d),
                     victimaNombre: vNombre,
+                    hospitalNombre: d['hospital_nombre']?.toString(),
                     tieneMovil: true,
-                    lastStatusChange: d['fechahoradespacho'] != null
-                        ? DateTime.tryParse(d['fechahoradespacho'].toString()) ?? DateTime.now()
-                        : DateTime.now(),
+                    lastStatusChange: _obtenerTimestampCambioEstado(d),
                   ));
                 }
               }
@@ -175,6 +233,43 @@ class _ListadosPageState extends State<ListadosPage> {
                   status: 'Sin asignar',
                   victimaNombre: vNombre,
                   tieneMovil: false,
+                ));
+              }
+            }
+          }
+
+          // Si no tenía víctimas o tenía despachos directos a nivel incidente (ej. Código Rojo)
+          if (moviles.every((m) => !m.tieneMovil) && incident['despachos'] is List) {
+            final despachosInc = (incident['despachos'] as List).where((d) {
+              if (d is! Map) return false;
+              final act = d['activo'];
+              final isAct = act == 1 || act == '1' || act == true;
+              final isFin = (act == 0 || act == '0' || act == false) &&
+                  (d['estado_operativo']?.toString().toLowerCase() == 'finalizado');
+              return isAct || isFin;
+            }).toList();
+
+            if (despachosInc.isNotEmpty) {
+              moviles.clear();
+              for (final rawD in despachosInc) {
+                final d = rawD as Map;
+                String mNombre = 'Móvil';
+                if (d['movilunidad'] is Map) {
+                  final mu = d['movilunidad'];
+                  if (mu['movil'] is Map && mu['movil']['nombre'] != null) {
+                    mNombre = mu['movil']['nombre'].toString();
+                  } else if (mu['patente'] != null) {
+                    mNombre = 'Unidad ${mu['patente']}';
+                  }
+                }
+                moviles.add(MovilStatus(
+                  idDespacho: int.tryParse(d['iddespacho']?.toString() ?? ''),
+                  nombre: mNombre,
+                  status: _mapearEstadoOperativoAKanban(d),
+                  victimaNombre: null,
+                  hospitalNombre: d['hospital_nombre']?.toString(),
+                  tieneMovil: true,
+                  lastStatusChange: _obtenerTimestampCambioEstado(d),
                 ));
               }
             }
@@ -211,17 +306,45 @@ class _ListadosPageState extends State<ListadosPage> {
 
           // 2. Estado Kanban dinámico
           final int? idEstadoInc = int.tryParse((
-            map['idcfg_estado'] ?? 
-            (map['ultimoEstadoRel'] != null ? map['ultimoEstadoRel']['idestado'] : null) ?? 
+            map['idcfg_estado'] ??
+            (map['ultimoEstadoRel'] != null ? (map['ultimoEstadoRel']['estado'] ?? map['ultimoEstadoRel']['idestado']) : null) ??
+            (incident['ultimoEstadoRel'] != null ? (incident['ultimoEstadoRel']['estado'] ?? incident['ultimoEstadoRel']['idestado']) : null) ??
             ''
           ).toString());
           final bool isIncActivo = (incident['activo'] ?? map['activo'] ?? 1).toString() != '0';
+          final String reporteCierre = (incident['reporte_cierre'] ?? incident['reporte'] ?? map['reporte_cierre'] ?? map['reporte'] ?? '').toString().trim();
+          final String estadoCierre = (incident['estado_cierre'] ?? map['estado_cierre'] ?? '').toString().trim().toLowerCase();
+
+          final ctrlInc = IngresoController().incidenteActual;
+          final bool cerradoEnMemoria = ctrlInc.idIncidente != null &&
+              ctrlInc.idIncidente.toString() == idIncidente &&
+              (IngresoController().pasoIncidente == 5 || (ctrlInc.reporte != null && ctrlInc.reporte!.trim().isNotEmpty));
+
+          final bool isCerrado = reporteCierre.isNotEmpty ||
+              estadoCierre == 'cerrado' ||
+              !isIncActivo ||
+              idEstadoInc == 7 ||
+              cerradoEnMemoria;
+
+          final bool hayVictimasSinMovil = moviles.any((m) => !m.tieneMovil);
+          final bool todosFinalizados = moviles.isNotEmpty &&
+              !hayVictimasSinMovil &&
+              moviles.every((m) => m.tieneMovil && (m.status == 'Finalizado' || m.status == 'Arribado' || m.status == 'Cerrado'));
 
           String status = 'Llamada recibida';
-          if (!isIncActivo || idEstadoInc == 7 || idEstadoInc == 8) {
+          if (isCerrado) {
+            status = 'Cerrado';
+            for (final m in moviles) {
+              if (m.tieneMovil) {
+                m.status = 'Cerrado';
+              }
+            }
+          } else if (todosFinalizados) {
             status = 'Finalizado';
           } else if (moviles.any((m) => m.tieneMovil)) {
             status = 'En curso';
+          } else if (idEstadoInc == 8) {
+            status = hayVictimasSinMovil ? 'Llamada recibida' : 'Finalizado';
           } else {
             status = 'Llamada recibida';
           }
@@ -239,13 +362,19 @@ class _ListadosPageState extends State<ListadosPage> {
         }
 
         _items = itemsMap.values.toList();
-        _isLoading = false;
       });
       
       print('Conexión lista: ${_rawDemandas.length} demandas cargadas.');
     } catch (e) {
-      setState(() => _isLoading = false);
       print('Error al precargar datos de API: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (_pendingReload) {
+          _pendingReload = false;
+          _cargarDatos();
+        }
+      }
     }
   }
 
@@ -418,7 +547,7 @@ class _ListadosPageState extends State<ListadosPage> {
                       ),
                       _buildColumn(
                         title: 'Finalizado',
-                        statuses: const ['Finalizado'],
+                        statuses: const ['Finalizado', 'Cerrado'],
                         dropStatus: 'Finalizado',
                         flex: 1,
                         accentColor: const Color(0xFF10B981),
@@ -491,7 +620,12 @@ class _ListadosPageState extends State<ListadosPage> {
           priorityColor: item.priorityColor,
           onTap: () {
             if (rawMap.isNotEmpty) {
-              IngresoController().cargarIncidenteDirecto(rawMap);
+              final mapToLoad = Map<String, dynamic>.from(rawMap);
+              if (item.status == 'Cerrado') {
+                mapToLoad['idcfg_estado'] = 7;
+                mapToLoad['estado_cierre'] = 'cerrado';
+              }
+              IngresoController().cargarIncidenteDirecto(mapToLoad);
             }
             widget.onNewIncidentTap?.call(false);
           },

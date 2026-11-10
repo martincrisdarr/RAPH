@@ -1,18 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../shared/services/despacho_service.dart';
 
 class MovilStatus {
+  final int? idDespacho;
   final String nombre;
   String status;
   DateTime lastStatusChange;
   final String? victimaNombre;
+  final String? hospitalNombre;
   final bool tieneMovil;
 
   MovilStatus({
+    this.idDespacho,
     required this.nombre,
     required this.status,
     DateTime? lastStatusChange,
     this.victimaNombre,
+    this.hospitalNombre,
     this.tieneMovil = true,
   }) : lastStatusChange = lastStatusChange ?? DateTime.now();
 }
@@ -98,37 +103,68 @@ class _KanbanCardState extends State<KanbanCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              if (widget.priority != null && widget.priority!.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: widget.priorityColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: widget.priorityColor.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: widget.priorityColor,
-                          shape: BoxShape.circle,
-                        ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.priority != null && widget.priority!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: widget.priorityColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: widget.priorityColor.withOpacity(0.3)),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.priority!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: widget.priorityColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: widget.priorityColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            widget.priority!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: widget.priorityColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  ],
+                  if (widget.globalStatus == 'Cerrado') ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withOpacity(0.16),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.verified_rounded, size: 12, color: Color(0xFF10B981)),
+                          const SizedBox(width: 4),
+                          Text(
+                            'CERRADO',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: const Color(0xFF10B981),
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               if (widget.time.isNotEmpty)
                 Text(
                   widget.time,
@@ -170,7 +206,7 @@ class _KanbanCardState extends State<KanbanCard> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          if (widget.globalStatus == 'En curso' && widget.moviles.isNotEmpty) ...[
+          if ((widget.globalStatus == 'En curso' || widget.globalStatus == 'Finalizado' || widget.globalStatus == 'Cerrado') && widget.moviles.isNotEmpty) ...[
             const SizedBox(height: 14),
             const Divider(height: 1, color: Colors.white10),
             const SizedBox(height: 10),
@@ -201,103 +237,139 @@ class _KanbanCardState extends State<KanbanCard> {
 
   Widget _buildVictimaMovilRow(ThemeData theme, MovilStatus m) {
     final hasVictimName = m.victimaNombre != null && m.victimaNombre!.isNotEmpty;
+    final hasHospital = m.hospitalNombre != null && m.hospitalNombre!.trim().isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (hasVictimName) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (hasVictimName) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.person, size: 12, color: Colors.white70),
+                      const SizedBox(width: 4),
+                      Text(
+                        m.victimaNombre!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.9),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (m.tieneMovil) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: theme.colorScheme.primary.withOpacity(0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.local_shipping_rounded, size: 13, color: theme.colorScheme.primary),
+                      const SizedBox(width: 5),
+                      Text(
+                        m.nombre,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildTimelineForMovil(theme, m),
+                const SizedBox(width: 8),
+                _buildTimeElapsedBadge(theme, m),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orangeAccent.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, size: 13, color: Colors.orangeAccent),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Sin móvil asignado',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.orangeAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    color: Colors.orangeAccent.withOpacity(0.2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Pendiente',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.orangeAccent.withOpacity(0.8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (hasHospital) ...[
+            const SizedBox(height: 5),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: const Color(0xFF00E5FF).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.person, size: 12, color: Colors.white70),
+                  const Icon(Icons.local_hospital_rounded, size: 11, color: Color(0xFF00E5FF)),
                   const SizedBox(width: 4),
-                  Text(
-                    m.victimaNombre!,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: Colors.white.withOpacity(0.9),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
+                  Flexible(
+                    child: Text(
+                      'Destino: ${m.hospitalNombre}',
+                      style: const TextStyle(
+                        color: Color(0xFF00E5FF),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (m.tieneMovil) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: theme.colorScheme.primary.withOpacity(0.35)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.local_shipping_rounded, size: 13, color: theme.colorScheme.primary),
-                  const SizedBox(width: 5),
-                  Text(
-                    m.nombre,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            _buildTimelineForMovil(theme, m),
-            const SizedBox(width: 8),
-            _buildTimeElapsedBadge(theme, m),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.orangeAccent.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.warning_amber_rounded, size: 13, color: Colors.orangeAccent),
-                  const SizedBox(width: 5),
-                  Text(
-                    'Sin móvil asignado',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: Colors.orangeAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                height: 2,
-                color: Colors.orangeAccent.withOpacity(0.2),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Pendiente',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: Colors.orangeAccent.withOpacity(0.8),
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -307,9 +379,11 @@ class _KanbanCardState extends State<KanbanCard> {
   }
 
   Widget _buildTimelineForMovil(ThemeData theme, MovilStatus movil) {
-    const steps = ['Despachado', 'En sitio', 'Traslado', 'Arribado'];
-    final activeIndex = steps.indexOf(movil.status);
-    final isFinalizado = movil.status == 'Finalizado' || widget.globalStatus == 'Finalizado';
+    const steps = ['Despachado', 'En sitio', 'Traslado', 'Finalizado'];
+    final bool isCerrado = movil.status == 'Cerrado' || widget.globalStatus == 'Cerrado';
+    final int activeIndex = (movil.status == 'Arribado' || isCerrado) ? 3 : steps.indexOf(movil.status);
+    final isFinalizado = isCerrado || movil.status == 'Finalizado' || movil.status == 'Arribado' || widget.globalStatus == 'Finalizado';
+    final Color activeColor = isFinalizado ? const Color(0xFF10B981) : theme.colorScheme.primary;
 
     return Expanded(
       child: LayoutBuilder(
@@ -337,7 +411,7 @@ class _KanbanCardState extends State<KanbanCard> {
                   ),
                 ),
                 
-                // 2. Línea de progreso (azul primario)
+                // 2. Línea de progreso
                 if (isFinalizado)
                   Positioned(
                     left: startOffset,
@@ -345,7 +419,7 @@ class _KanbanCardState extends State<KanbanCard> {
                     top: 11,
                     height: 2,
                     child: Container(
-                      color: theme.colorScheme.primary.withOpacity(0.6),
+                      color: activeColor.withOpacity(0.6),
                     ),
                   )
                 else if (activeIndex != -1 && activeIndex > 0)
@@ -355,7 +429,7 @@ class _KanbanCardState extends State<KanbanCard> {
                     top: 11,
                     height: 2,
                     child: Container(
-                      color: theme.colorScheme.primary.withOpacity(0.6),
+                      color: activeColor.withOpacity(0.6),
                     ),
                   ),
 
@@ -374,11 +448,26 @@ class _KanbanCardState extends State<KanbanCard> {
                       height: 24.0,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () {
+                        onTap: () async {
+                          final nuevoPasoLabel = steps[i];
                           setState(() {
-                            movil.status = steps[i];
+                            movil.status = nuevoPasoLabel;
                             movil.lastStatusChange = DateTime.now();
                           });
+                          if (movil.idDespacho != null) {
+                            String backendEstado = 'despachado';
+                            if (nuevoPasoLabel == 'En sitio') {
+                              backendEstado = 'en_sitio';
+                            } else if (nuevoPasoLabel == 'Traslado') {
+                              backendEstado = 'traslado';
+                            } else if (nuevoPasoLabel == 'Finalizado') {
+                              backendEstado = 'finalizado';
+                            }
+                            await DespachoService.cambiarEstadoOperativo(
+                              idDespacho: movil.idDespacho!,
+                              estadoOperativo: backendEstado,
+                            );
+                          }
                         },
                         child: Center(
                           child: Container(
@@ -386,13 +475,13 @@ class _KanbanCardState extends State<KanbanCard> {
                             height: size,
                             decoration: BoxDecoration(
                               color: (isStepActive || isStepCompleted)
-                                  ? theme.colorScheme.primary
+                                  ? activeColor
                                   : Colors.white24,
                               shape: BoxShape.circle,
                               boxShadow: isStepActive
                                   ? [
                                       BoxShadow(
-                                        color: theme.colorScheme.primary.withOpacity(0.6),
+                                        color: activeColor.withOpacity(0.6),
                                         blurRadius: 4,
                                         spreadRadius: 1,
                                       ),
@@ -409,19 +498,19 @@ class _KanbanCardState extends State<KanbanCard> {
                 // 4. Etiqueta de texto para el paso activo (ubicada sobre el paso activo)
                 if (activeIndex != -1)
                   Positioned(
-                    left: (startOffset + activeIndex * stepSpacing - 18.0).clamp(0.0, totalWidth - 55.0),
+                    left: (startOffset + activeIndex * stepSpacing - 18.0).clamp(0.0, totalWidth - 62.0),
                     top: 2,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3), width: 0.5),
+                        border: Border.all(color: activeColor.withOpacity(0.4), width: 0.6),
                       ),
                       child: Text(
-                        steps[activeIndex],
+                        isCerrado ? 'Cerrado' : steps[activeIndex],
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
+                          color: activeColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 10,
                         ),
@@ -437,8 +526,10 @@ class _KanbanCardState extends State<KanbanCard> {
   }
 
   Widget _buildTimeElapsedBadge(ThemeData theme, MovilStatus movil) {
-    const steps = ['Despachado', 'En sitio', 'Traslado', 'Arribado'];
-    final activeIndex = steps.indexOf(movil.status);
+    const steps = ['Despachado', 'En sitio', 'Traslado', 'Finalizado'];
+    final activeIndex = (movil.status == 'Arribado' || movil.status == 'Cerrado' || widget.globalStatus == 'Cerrado')
+        ? 3
+        : steps.indexOf(movil.status);
     if (activeIndex == -1) {
       return const SizedBox.shrink();
     }

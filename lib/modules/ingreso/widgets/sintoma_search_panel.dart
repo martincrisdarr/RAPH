@@ -112,7 +112,70 @@ class _SintomaSearchPanelState extends State<SintomaSearchPanel> {
         ),
         const SizedBox(height: 12),
 
-        // 3. Contenedor con lista de Fichas Oficiales
+        // 3. Indicador de Asignación Activa
+        if (widget.sintomaSeleccionado != null) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _getColorForSeries(widget.sintomaSeleccionado!.codigoColor).withOpacity(0.16),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _getColorForSeries(widget.sintomaSeleccionado!.codigoColor).withOpacity(0.55),
+                width: 1.4,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 20,
+                  color: _getColorForSeries(widget.sintomaSeleccionado!.codigoColor),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 13, color: Colors.white),
+                      children: [
+                        const TextSpan(
+                          text: 'ASIGNACIÓN SELECCIONADA: ',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white70, fontSize: 11),
+                        ),
+                        TextSpan(
+                          text: '${widget.sintomaSeleccionado!.codigo} - ${widget.sintomaSeleccionado!.nombre} ',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(
+                          text: '(${widget.sintomaSeleccionado!.codigoColor?.toUpperCase() ?? "ROJO"})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _getColorForSeries(widget.sintomaSeleccionado!.codigoColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => widget.onSintomaSelected(widget.sintomaSeleccionado!),
+                  icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white70),
+                  label: const Text(
+                    'QUITAR',
+                    style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // 4. Contenedor con lista de Fichas Oficiales
         if (widget.isLoading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 36.0),
@@ -156,75 +219,75 @@ class _SintomaSearchPanelState extends State<SintomaSearchPanel> {
                   itemCount: filteredSintomas.length,
                   separatorBuilder: (context, index) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
-                  final sintoma = filteredSintomas[index];
-                  final isSelected = widget.sintomaSeleccionado?.id == sintoma.id;
-                  final seriesColor = _getColorForSeries(sintoma.codigoColor);
+                    final sintoma = filteredSintomas[index];
+                    final isSelected = widget.sintomaSeleccionado?.id == sintoma.id;
+                    final seriesColor = _getColorForSeries(sintoma.codigoColor);
 
-                  return Material(
-                    color: isSelected
-                        ? seriesColor.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.04),
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      onTap: () => widget.onSintomaSelected(sintoma),
+                    return Material(
+                      color: isSelected
+                          ? seriesColor.withOpacity(0.2)
+                          : Colors.white.withOpacity(0.04),
                       borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isSelected ? seriesColor : Colors.white12,
-                            width: isSelected ? 1.8 : 1.0,
+                      child: InkWell(
+                        onTap: () => widget.onSintomaSelected(sintoma),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected ? seriesColor : Colors.white12,
+                              width: isSelected ? 1.8 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // Badge con el código oficial
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: seriesColor.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(color: seriesColor.withOpacity(0.6)),
+                                ),
+                                child: Text(
+                                  sintoma.codigo,
+                                  style: TextStyle(
+                                    color: seriesColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+
+                              // Nombre del Motivo / Ficha
+                              Expanded(
+                                child: Text(
+                                  sintoma.nombre,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.88),
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+
+                              // Indicador de selección
+                              if (isSelected)
+                                Icon(Icons.check_circle_rounded, color: seriesColor, size: 18)
+                              else
+                                Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
+                            ],
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            // Badge con el código oficial
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: seriesColor.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: seriesColor.withOpacity(0.6)),
-                              ),
-                              child: Text(
-                                sintoma.codigo,
-                                style: TextStyle(
-                                  color: seriesColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-
-                            // Nombre del Motivo / Ficha
-                            Expanded(
-                              child: Text(
-                                sintoma.nombre,
-                                style: TextStyle(
-                                  color: isSelected ? Colors.white : Colors.white.withOpacity(0.88),
-                                  fontSize: 13,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-
-                            // Indicador de selección
-                            if (isSelected)
-                              Icon(Icons.check_circle_rounded, color: seriesColor, size: 18)
-                            else
-                              Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
-                          ],
-                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }

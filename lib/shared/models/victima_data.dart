@@ -9,16 +9,20 @@ class VictimaData {
   String edad = '';
   int? idConfGenero;
   String dni = '';
-  String? codigoTriage; 
+  String? codigoTriage;
   List<String> sintomasSeleccionados = [];
   String busqueda = '';
   List<PlatformFile> archivosAdjuntos = [];
   String observaciones = '';
   String? idMovilAsignado;
   String? reporte;
+  DateTime? fechaHoraCierre;
+  String? usuarioCierre;
   int? idVictimaEvaluacion;
   int? idSintomaSeleccionadoId;
   int? idVictimaSintomaActivo;
+
+  bool get isCerrada => reporte != null && reporte!.trim().isNotEmpty;
 
   Victima toVictima(int? idIncidente) {
     int? idConfCodigo;
@@ -45,6 +49,8 @@ class VictimaData {
       observaciones: observaciones.isNotEmpty ? observaciones : null,
       idMovilAsignado: idMovilAsignado,
       reporte: reporte,
+      fechaHoraCierre: fechaHoraCierre,
+      usuarioCierre: usuarioCierre,
     );
   }
 
@@ -60,6 +66,8 @@ class VictimaData {
         'observaciones': observaciones,
         'idMovilAsignado': idMovilAsignado,
         'reporte': reporte,
+        'fechaHoraCierre': fechaHoraCierre?.toIso8601String(),
+        'usuarioCierre': usuarioCierre,
       };
 
   static VictimaData fromStorageJson(Map<String, dynamic> json) {
@@ -75,6 +83,10 @@ class VictimaData {
     v.observaciones = json['observaciones'] ?? '';
     v.idMovilAsignado = json['idMovilAsignado'];
     v.reporte = json['reporte'];
+    v.fechaHoraCierre = json['fechaHoraCierre'] != null
+        ? DateTime.tryParse(json['fechaHoraCierre'].toString())
+        : null;
+    v.usuarioCierre = json['usuarioCierre'];
     return v;
   }
 
@@ -88,6 +100,8 @@ class VictimaData {
     v.observaciones = victima.observaciones ?? '';
     v.idMovilAsignado = victima.idMovilAsignado;
     v.reporte = victima.reporte;
+    v.fechaHoraCierre = victima.fechaHoraCierre;
+    v.usuarioCierre = victima.usuarioCierre;
 
     if (victima.idConfCodigo == 29) {
       v.codigoTriage = 'Rojo';

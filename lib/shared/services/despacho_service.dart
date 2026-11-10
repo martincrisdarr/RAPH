@@ -26,7 +26,8 @@ class DespachoService {
   }) async {
     try {
       final now = DateTime.now();
-      final fechaFormatted = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+      final fechaFormatted =
+          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
 
       final bodyData = <String, dynamic>{
         if (idVictima != null) 'idvictima': idVictima,
@@ -38,6 +39,7 @@ class DespachoService {
         'recibido': 0,
         'confirmado': 0,
         'activo': 1,
+        'estado_operativo': 'despachado',
       };
 
       final response = await http.post(
@@ -78,22 +80,66 @@ class DespachoService {
     }
   }
 
-  /// Obtener despachos activos registrados por idincidente (activo == 1)
-  static Future<List<Map<String, dynamic>>> obtenerPorIncidente(int idIncidente) async {
+  /// Cambiar el estado operativo de un despacho ('en_camino', 'en_sitio', 'traslado', 'en_hospital', 'finalizado')
+  static Future<Map<String, dynamic>?> cambiarEstadoOperativo({
+    required int idDespacho,
+    required String estadoOperativo,
+    int? idHospital,
+    String? observacionAdicional,
+  }) async {
     try {
+      final payload = <String, dynamic>{
+        'iddespacho': idDespacho,
+        'estado_operativo': estadoOperativo,
+        if (idHospital != null) 'idhospital': idHospital,
+        if (observacionAdicional != null && observacionAdicional.trim().isNotEmpty)
+          'observacion_adicional': observacionAdicional.trim(),
+      };
+
+      final response = await http.post(
+        Uri.parse('$_endpoint/$idDespacho/estado'),
+        headers: _getHeaders(),
+        body: json.encode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = json.decode(utf8.decode(response.bodyBytes));
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      }
+    } catch (e) {
+      print('[DespachoService] Error al cambiar estado operativo: $e');
+    }
+    return null;
+  }
+
+  /// Obtener despachos registrados por idincidente.
+  /// Por defecto solo devuelve activos (`activo == 1`).
+  /// Si `incluirFinalizados` es true, incluye también aquellos finalizados (`activo == 0` y no cancelados).
+  static Future<List<Map<String, dynamic>>> obtenerPorIncidente(
+    int idIncidente, {
+    bool incluirFinalizados = false,
+  }) async {
+    try {
+      final queryParams = incluirFinalizados
+          ? 'idincidente=$idIncidente&expand=movilunidad.movil,movil,hospital'
+          : 'idincidente=$idIncidente&activo=1&expand=movilunidad.movil,movil,hospital';
       final response = await http.get(
-        Uri.parse('$_endpoint?idincidente=$idIncidente&activo=1&expand=movilunidad.movil,movil'),
+        Uri.parse('$_endpoint?$queryParams'),
         headers: _getHeaders(),
       );
       if (response.statusCode == 200) {
-        final decoded = json.decode(response.body);
+        final decoded = json.decode(utf8.decode(response.bodyBytes));
         if (decoded is List) {
           return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).where((d) {
             final act = d['activo'];
             final isActivo = act == 1 || act == '1' || act == true;
+            final isFinalizado = (act == 0 || act == '0' || act == false) &&
+                (d['estado_operativo']?.toString().toLowerCase() == 'finalizado');
             final incId = d['idincidente'] != null ? int.tryParse(d['idincidente'].toString()) : null;
             final matchesInc = incId == null || incId == idIncidente;
-            return isActivo && matchesInc;
+            return (isActivo || (incluirFinalizados && isFinalizado)) && matchesInc;
           }).toList();
         }
       }
@@ -118,12 +164,14 @@ class DespachoService {
       } else {
         print('[DespachoService] DELETE status ${response.statusCode}, fallback con PUT activo=2...');
         final now = DateTime.now();
-        final fechaCierre = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+        final fechaCierre =
+            "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
         final putResp = await http.put(
           Uri.parse('$_endpoint/$idDespacho'),
           headers: _getHeaders(),
           body: json.encode({
             'activo': 2,
+            'estado_operativo': 'cancelado',
             'fechahoracierre': fechaCierre,
           }),
         );
