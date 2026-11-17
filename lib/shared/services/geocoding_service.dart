@@ -29,7 +29,7 @@ class GeocodingService {
           
           // Verificamos que el resultado contenga la localidad seleccionada
           final String normAddress = _normalize(fullAddress);
-          final String normLoc = _normalize(loc);
+          final String normLoc = _normalize(loc)<;
           
           if (!normAddress.contains(normLoc)) {
             return null;
