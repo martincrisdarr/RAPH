@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 class ApiConfig {
-  // En compilación de Producción (kReleaseMode == true) SIEMPRE usa baseUrlProd y socketUrlProd.
-  // En Desarrollo (flutter run / debug), usa baseUrlLocal (http://localhost/RAPH/web).
-  static const bool useLocalInDev = true;
+  // Por defecto apunta siempre a Producción (emergenciasyriesgos).
+  // Cambiar useLocalInDev a true manualmente cuando se quiera apuntar a localhost.
+  static const bool useLocalInDev = false;
   static const bool useLocalSocket = false;
 
   static const String baseUrlProd = 'https://emergenciasyriesgos.neuquen.gov.ar/giro/api/web';
